@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: livinglab_db
+    environment:
+      POSTGRES_DB: livinglab_sensor
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - /mnt/storage/livinglab/db_data:/var/lib/postgresql/data
+      - /mnt/backup:/mnt/backup
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - livinglab_network
+
+  web:
+    build: .
+    container_name: livinglab_web
+    command: sh -c "python manage.py migrate && gunicorn --bind 0.0.0.0:10021 --workers 4 livinglab.wsgi:application"
+    environment:
+      DEBUG: "False"
+      DJANGO_SECRET_KEY: "your-secret-key-change-in-production"
+      DB_NAME: livinglab_sensor
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: db
+      DB_PORT: 5432
+    ports:
+      - "10021:10021"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - /mnt/storage/livinglab/logs:/app/logs
+      - /mnt/storage/livinglab/staticfiles:/app/staticfiles
+    networks:
+      - livinglab_network
+
+networks:
+  livinglab_network:
+    driver: bridge

@@ -1,0 +1,402 @@
+-- MySQL dump 10.13  Distrib 5.7.42, for Linux (x86_64)
+--
+-- Host: localhost    Database: livinglab_sensor
+-- ------------------------------------------------------
+-- Server version	5.7.42-0ubuntu0.18.04.1
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!40101 SET NAMES utf8 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+
+--
+-- Table structure for table `auth_group`
+--
+
+DROP TABLE IF EXISTS `auth_group`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `auth_group` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(150) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `auth_group`
+--
+
+LOCK TABLES `auth_group` WRITE;
+/*!40000 ALTER TABLE `auth_group` DISABLE KEYS */;
+/*!40000 ALTER TABLE `auth_group` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `auth_group_permissions`
+--
+
+DROP TABLE IF EXISTS `auth_group_permissions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `auth_group_permissions` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `group_id` int(11) NOT NULL,
+  `permission_id` int(11) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `auth_group_permissions_group_id_permission_id_0cd325b0_uniq` (`group_id`,`permission_id`),
+  KEY `auth_group_permissio_permission_id_84c5c92e_fk_auth_perm` (`permission_id`),
+  CONSTRAINT `auth_group_permissio_permission_id_84c5c92e_fk_auth_perm` FOREIGN KEY (`permission_id`) REFERENCES `auth_permission` (`id`),
+  CONSTRAINT `auth_group_permissions_group_id_b120cbf9_fk_auth_group_id` FOREIGN KEY (`group_id`) REFERENCES `auth_group` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `auth_group_permissions`
+--
+
+LOCK TABLES `auth_group_permissions` WRITE;
+/*!40000 ALTER TABLE `auth_group_permissions` DISABLE KEYS */;
+/*!40000 ALTER TABLE `auth_group_permissions` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `auth_permission`
+--
+
+DROP TABLE IF EXISTS `auth_permission`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `auth_permission` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `content_type_id` int(11) NOT NULL,
+  `codename` varchar(100) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `auth_permission_content_type_id_codename_01ab375a_uniq` (`content_type_id`,`codename`),
+  CONSTRAINT `auth_permission_content_type_id_2f476e4b_fk_django_co` FOREIGN KEY (`content_type_id`) REFERENCES `django_content_type` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=49 DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `auth_permission`
+--
+
+LOCK TABLES `auth_permission` WRITE;
+/*!40000 ALTER TABLE `auth_permission` DISABLE KEYS */;
+INSERT INTO `auth_permission` VALUES (1,'Can add log entry',1,'add_logentry'),(2,'Can change log entry',1,'change_logentry'),(3,'Can delete log entry',1,'delete_logentry'),(4,'Can view log entry',1,'view_logentry'),(5,'Can add permission',2,'add_permission'),(6,'Can change permission',2,'change_permission'),(7,'Can delete permission',2,'delete_permission'),(8,'Can view permission',2,'view_permission'),(9,'Can add group',3,'add_group'),(10,'Can change group',3,'change_group'),(11,'Can delete group',3,'delete_group'),(12,'Can view group',3,'view_group'),(13,'Can add user',4,'add_user'),(14,'Can change user',4,'change_user'),(15,'Can delete user',4,'delete_user'),(16,'Can view user',4,'view_user'),(17,'Can add content type',5,'add_contenttype'),(18,'Can change content type',5,'change_contenttype'),(19,'Can delete content type',5,'delete_contenttype'),(20,'Can view content type',5,'view_contenttype'),(21,'Can add session',6,'add_session'),(22,'Can change session',6,'change_session'),(23,'Can delete session',6,'delete_session'),(24,'Can view session',6,'view_session'),(25,'Can add sensor_data',7,'add_sensor_data'),(26,'Can change sensor_data',7,'change_sensor_data'),(27,'Can delete sensor_data',7,'delete_sensor_data'),(28,'Can view sensor_data',7,'view_sensor_data'),(29,'Can add ip',8,'add_ip'),(30,'Can change ip',8,'change_ip'),(31,'Can delete ip',8,'delete_ip'),(32,'Can view ip',8,'view_ip'),(33,'Can add ip_db',8,'add_ip_db'),(34,'Can change ip_db',8,'change_ip_db'),(35,'Can delete ip_db',8,'delete_ip_db'),(36,'Can view ip_db',8,'view_ip_db'),(37,'Can add sensor_check_db',9,'add_sensor_check_db'),(38,'Can change sensor_check_db',9,'change_sensor_check_db'),(39,'Can delete sensor_check_db',9,'delete_sensor_check_db'),(40,'Can view sensor_check_db',9,'view_sensor_check_db'),(41,'Can add mobile_check_db',10,'add_mobile_check_db'),(42,'Can change mobile_check_db',10,'change_mobile_check_db'),(43,'Can delete mobile_check_db',10,'delete_mobile_check_db'),(44,'Can view mobile_check_db',10,'view_mobile_check_db'),(45,'Can add sensor_location',11,'add_sensor_location'),(46,'Can change sensor_location',11,'change_sensor_location'),(47,'Can delete sensor_location',11,'delete_sensor_location'),(48,'Can view sensor_location',11,'view_sensor_location');
+/*!40000 ALTER TABLE `auth_permission` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `auth_user`
+--
+
+DROP TABLE IF EXISTS `auth_user`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `auth_user` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `password` varchar(128) NOT NULL,
+  `last_login` datetime(6) DEFAULT NULL,
+  `is_superuser` tinyint(1) NOT NULL,
+  `username` varchar(150) NOT NULL,
+  `first_name` varchar(150) NOT NULL,
+  `last_name` varchar(150) NOT NULL,
+  `email` varchar(254) NOT NULL,
+  `is_staff` tinyint(1) NOT NULL,
+  `is_active` tinyint(1) NOT NULL,
+  `date_joined` datetime(6) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `username` (`username`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `auth_user`
+--
+
+LOCK TABLES `auth_user` WRITE;
+/*!40000 ALTER TABLE `auth_user` DISABLE KEYS */;
+/*!40000 ALTER TABLE `auth_user` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `auth_user_groups`
+--
+
+DROP TABLE IF EXISTS `auth_user_groups`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `auth_user_groups` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `group_id` int(11) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `auth_user_groups_user_id_group_id_94350c0c_uniq` (`user_id`,`group_id`),
+  KEY `auth_user_groups_group_id_97559544_fk_auth_group_id` (`group_id`),
+  CONSTRAINT `auth_user_groups_group_id_97559544_fk_auth_group_id` FOREIGN KEY (`group_id`) REFERENCES `auth_group` (`id`),
+  CONSTRAINT `auth_user_groups_user_id_6a12ed8b_fk_auth_user_id` FOREIGN KEY (`user_id`) REFERENCES `auth_user` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `auth_user_groups`
+--
+
+LOCK TABLES `auth_user_groups` WRITE;
+/*!40000 ALTER TABLE `auth_user_groups` DISABLE KEYS */;
+/*!40000 ALTER TABLE `auth_user_groups` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `auth_user_user_permissions`
+--
+
+DROP TABLE IF EXISTS `auth_user_user_permissions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `auth_user_user_permissions` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `permission_id` int(11) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `auth_user_user_permissions_user_id_permission_id_14a6b632_uniq` (`user_id`,`permission_id`),
+  KEY `auth_user_user_permi_permission_id_1fbb5f2c_fk_auth_perm` (`permission_id`),
+  CONSTRAINT `auth_user_user_permi_permission_id_1fbb5f2c_fk_auth_perm` FOREIGN KEY (`permission_id`) REFERENCES `auth_permission` (`id`),
+  CONSTRAINT `auth_user_user_permissions_user_id_a95ead1b_fk_auth_user_id` FOREIGN KEY (`user_id`) REFERENCES `auth_user` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `auth_user_user_permissions`
+--
+
+LOCK TABLES `auth_user_user_permissions` WRITE;
+/*!40000 ALTER TABLE `auth_user_user_permissions` DISABLE KEYS */;
+/*!40000 ALTER TABLE `auth_user_user_permissions` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `django_admin_log`
+--
+
+DROP TABLE IF EXISTS `django_admin_log`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `django_admin_log` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `action_time` datetime(6) NOT NULL,
+  `object_id` longtext,
+  `object_repr` varchar(200) NOT NULL,
+  `action_flag` smallint(5) unsigned NOT NULL,
+  `change_message` longtext NOT NULL,
+  `content_type_id` int(11) DEFAULT NULL,
+  `user_id` int(11) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `django_admin_log_content_type_id_c4bce8eb_fk_django_co` (`content_type_id`),
+  KEY `django_admin_log_user_id_c564eba6_fk_auth_user_id` (`user_id`),
+  CONSTRAINT `django_admin_log_content_type_id_c4bce8eb_fk_django_co` FOREIGN KEY (`content_type_id`) REFERENCES `django_content_type` (`id`),
+  CONSTRAINT `django_admin_log_user_id_c564eba6_fk_auth_user_id` FOREIGN KEY (`user_id`) REFERENCES `auth_user` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `django_admin_log`
+--
+
+LOCK TABLES `django_admin_log` WRITE;
+/*!40000 ALTER TABLE `django_admin_log` DISABLE KEYS */;
+/*!40000 ALTER TABLE `django_admin_log` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `django_content_type`
+--
+
+DROP TABLE IF EXISTS `django_content_type`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `django_content_type` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `app_label` varchar(100) NOT NULL,
+  `model` varchar(100) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `django_content_type_app_label_model_76bd3d3b_uniq` (`app_label`,`model`)
+) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `django_content_type`
+--
+
+LOCK TABLES `django_content_type` WRITE;
+/*!40000 ALTER TABLE `django_content_type` DISABLE KEYS */;
+INSERT INTO `django_content_type` VALUES (1,'admin','logentry'),(3,'auth','group'),(2,'auth','permission'),(4,'auth','user'),(5,'contenttypes','contenttype'),(8,'sensor','ip_db'),(10,'sensor','mobile_check_db'),(9,'sensor','sensor_check_db'),(7,'sensor','sensor_data'),(11,'sensor','sensor_location'),(6,'sessions','session');
+/*!40000 ALTER TABLE `django_content_type` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `django_migrations`
+--
+
+DROP TABLE IF EXISTS `django_migrations`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `django_migrations` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `app` varchar(255) NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `applied` datetime(6) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=33 DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `django_migrations`
+--
+
+LOCK TABLES `django_migrations` WRITE;
+/*!40000 ALTER TABLE `django_migrations` DISABLE KEYS */;
+INSERT INTO `django_migrations` VALUES (1,'contenttypes','0001_initial','2024-11-17 10:17:59.566752'),(2,'auth','0001_initial','2024-11-17 10:18:00.237431'),(3,'admin','0001_initial','2024-11-17 10:18:00.386559'),(4,'admin','0002_logentry_remove_auto_add','2024-11-17 10:18:00.411415'),(5,'admin','0003_logentry_add_action_flag_choices','2024-11-17 10:18:00.433859'),(6,'contenttypes','0002_remove_content_type_name','2024-11-17 10:18:00.509862'),(7,'auth','0002_alter_permission_name_max_length','2024-11-17 10:18:00.535214'),(8,'auth','0003_alter_user_email_max_length','2024-11-17 10:18:00.559505'),(9,'auth','0004_alter_user_username_opts','2024-11-17 10:18:00.580176'),(10,'auth','0005_alter_user_last_login_null','2024-11-17 10:18:00.620483'),(11,'auth','0006_require_contenttypes_0002','2024-11-17 10:18:00.624048'),(12,'auth','0007_alter_validators_add_error_messages','2024-11-17 10:18:00.634620'),(13,'auth','0008_alter_user_username_max_length','2024-11-17 10:18:00.652630'),(14,'auth','0009_alter_user_last_name_max_length','2024-11-17 10:18:00.670376'),(15,'auth','0010_alter_group_name_max_length','2024-11-17 10:18:00.689310'),(16,'auth','0011_update_proxy_permissions','2024-11-17 10:18:00.702012'),(17,'auth','0012_alter_user_first_name_max_length','2024-11-17 10:18:00.726454'),(18,'sessions','0001_initial','2024-11-17 10:18:00.777920'),(19,'sensor','0001_initial','2024-11-17 10:23:21.519377'),(20,'sensor','0002_auto_20241117_1522','2024-11-17 15:22:09.740044'),(21,'sensor','0003_ip','2024-11-19 01:59:03.614116'),(22,'sensor','0004_rename_ip_ip_db','2024-11-19 02:03:27.431684'),(23,'sensor','0005_ip_db_time','2024-11-19 02:11:07.229896'),(24,'sensor','0006_delete_ip_db','2024-11-19 02:11:07.233838'),(25,'sensor','0007_ip_db','2024-11-19 02:11:07.236675'),(26,'sensor','0008_delete_ip_db','2024-11-19 02:11:07.240510'),(27,'sensor','0009_ip_db','2024-11-19 02:11:20.212807'),(28,'sensor','0010_sensor_check_db','2024-11-26 17:18:23.812994'),(29,'sensor','0011_alter_sensor_data_temperature','2025-01-22 06:29:11.438676'),(30,'sensor','0012_sensor_data_rssi','2025-02-04 06:49:44.440546'),(31,'sensor','0013_mobile_check_db','2025-02-05 05:09:35.906012'),(32,'sensor','0014_sensor_location','2025-06-30 06:38:03.026402');
+/*!40000 ALTER TABLE `django_migrations` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `django_session`
+--
+
+DROP TABLE IF EXISTS `django_session`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `django_session` (
+  `session_key` varchar(40) NOT NULL,
+  `session_data` longtext NOT NULL,
+  `expire_date` datetime(6) NOT NULL,
+  PRIMARY KEY (`session_key`),
+  KEY `django_session_expire_date_a5c62663` (`expire_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `django_session`
+--
+
+LOCK TABLES `django_session` WRITE;
+/*!40000 ALTER TABLE `django_session` DISABLE KEYS */;
+/*!40000 ALTER TABLE `django_session` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `sensor_ip_db`
+--
+
+DROP TABLE IF EXISTS `sensor_ip_db`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `sensor_ip_db` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `sensor` varchar(100) NOT NULL,
+  `ip` varchar(100) NOT NULL,
+  `time` int(11) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=42 DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `sensor_ip_db`
+--
+
+LOCK TABLES `sensor_ip_db` WRITE;
+/*!40000 ALTER TABLE `sensor_ip_db` DISABLE KEYS */;
+INSERT INTO `sensor_ip_db` VALUES (1,'sensor 01','172.30.128.46',1751425301),(2,'sensor 03','172.30.64.28',1751439793),(3,'sensor 02','172.30.128.40',1751439830),(4,'sensor 04','172.30.129.211',1751432464),(5,'sensor 05','172.30.134.190',1749270470),(6,'sensor 06','172.30.128.101',1751429097),(7,'sensor 07','172.30.133.89',1751425314),(8,'sensor 09','172.30.66.83',1751439794),(9,'sensor 10','172.30.143.86',1751439808),(10,'sensor 11','172.30.130.103',1751439861),(11,'sensor 12','172.30.67.170',1751430562),(12,'sensor 13','172.30.83.196',1751440053),(13,'sensor 14','172.30.143.252',1751439826),(14,'sensor 15','172.30.128.11',1751407419),(15,'sensor 16','172.30.65.27',1751432595),(16,'sensor 17','172.30.66.246',1751439830),(17,'sensor 18','172.30.133.247',1751439637),(18,'sensor 20','172.30.64.12',1751439795),(19,'sensor 19','172.30.69.240',1751439851),(20,'sensor 21','172.30.65.172',1751439832),(21,'sensor 22','172.30.66.231',1751439847),(22,'sensor 23','172.30.131.9',1751439858),(23,'sensor 24','172.30.8.29',1751421863),(24,'sensor 25','172.30.64.181',1751439781),(25,'sensor 26','172.30.65.149',1751439794),(26,'sensor 27','172.30.68.225',1751439852),(27,'sensor 28','172.30.73.0',1751439812),(28,'sensor 29','172.30.67.80',1751439831),(29,'sensor 30','172.30.65.5',1750636995),(30,'sensor 08','172.30.68.125',1751428933),(32,'sensor 34','172.30.75.145',1751433011),(33,'sensor 32','172.30.128.155',1751426701),(34,'sensor 33','172.30.64.233',1751432432),(35,'sensor 31','172.30.129.229',1751379647),(36,'sensor 35','172.30.64.212',1750583284),(37,'sensor 36','192.168.0.13',1737021927),(38,'sensor 37','192.168.0.75',1737441142),(39,'sensor 38','192.168.0.9',1737445536),(40,'sensor 39','192.168.0.13',1737447164),(41,'sensor 40','192.168.0.14',1737450512);
+/*!40000 ALTER TABLE `sensor_ip_db` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `sensor_mobile_check_db`
+--
+
+DROP TABLE IF EXISTS `sensor_mobile_check_db`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `sensor_mobile_check_db` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `sensor` varchar(100) NOT NULL,
+  `temperature` int(11) NOT NULL,
+  `co2` int(11) NOT NULL,
+  `rssi` int(11) NOT NULL,
+  `receiver` varchar(100) NOT NULL,
+  `sensing_time` double NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=36 DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `sensor_mobile_check_db`
+--
+
+LOCK TABLES `sensor_mobile_check_db` WRITE;
+/*!40000 ALTER TABLE `sensor_mobile_check_db` DISABLE KEYS */;
+INSERT INTO `sensor_mobile_check_db` VALUES (1,'sensor 33',30,400,-100,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1750082244),(2,'sensor 32',25,914,-86,'a0aaf096aaba8d91',1741675824),(3,'sensor 31',25,790,-63,'a0aaf096aaba8d91',1743067321),(4,'sensor 04',38,400,-99,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1751253489),(5,'sensor 05',37,400,-98,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1751423586),(6,'sensor 01',39,400,-88,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1751253530),(7,'sensor 03',39,400,-83,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1751253523),(8,'sensor 14',39,705,-94,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1750655032),(9,'sensor 02',36,440,-89,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1751253637),(10,'sensor 26',26,400,-95,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1750081596),(11,'sensor 28',35,400,-98,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1751253788),(12,'sensor 27',37,400,-96,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1751253852),(13,'sensor 30',29,806,-53,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1750582294),(14,'sensor 29',35,400,-95,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1751253951),(15,'sensor 17',36,556,-80,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1751253946),(16,'sensor 34',30,854,-94,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1750082249),(17,'sensor 08',32,451,-93,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1751253504),(18,'sensor 35',33,479,-82,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1751254136),(19,'sensor 21',37,512,-94,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1750582881),(20,'sensor 16',29,400,-98,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1750081783),(21,'sensor 22',38,400,-92,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1751253919),(22,'sensor 13',29,400,-89,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1750082257),(23,'sensor 07',33,400,-97,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1749524440),(24,'',40,827,-83,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1750654932),(25,'sensor 23',31,400,-92,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1749515695),(26,'sensor 15',29,705,-93,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1750082195),(27,'rasp',29,824,-94,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1750082156),(28,'sensor 09',33,400,-98,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1749525073),(29,'sensor 24',33,1026,-96,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1750082083),(30,'sensor 11',33,400,-94,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1749614382),(31,'raspberrypi',31,434,-94,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1749730493),(32,'sensor 25',27,659,-97,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1750082051),(33,'sensor 18',30,400,-37,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1751423633),(34,'sensor 19',33,400,-88,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1751254139),(35,'sensor 12',33,438,-93,'A323101F-6AC6-45E4-A5CD-D0C306046F8F',1751254180);
+/*!40000 ALTER TABLE `sensor_mobile_check_db` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `sensor_sensor_check_db`
+--
+
+DROP TABLE IF EXISTS `sensor_sensor_check_db`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `sensor_sensor_check_db` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `sensor` varchar(100) NOT NULL,
+  `temperature` int(11) NOT NULL,
+  `co2` int(11) NOT NULL,
+  `sensing_time` double NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=46 DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `sensor_sensor_check_db`
+--
+
+LOCK TABLES `sensor_sensor_check_db` WRITE;
+/*!40000 ALTER TABLE `sensor_sensor_check_db` DISABLE KEYS */;
+INSERT INTO `sensor_sensor_check_db` VALUES (1,'sensor 02',36,671,1751442682.9377124),(2,'sensor 01',38,577,1751442677.4334128),(3,'sensor 03',38,997,1751442683.0422976),(4,'sensor 06',34,1066,1751442676.2836907),(5,'sensor 07',38,455,1751428193.1859164),(6,'sensor 08',34,570,1751432397.8087404),(7,'sensor 09',38,2568,1751442684.3284457),(8,'sensor 10',36,567,1751442676.1968005),(9,'sensor 11',36,400,1751442667.0608428),(10,'sensor 12',35,507,1751432114.9359694),(11,'sensor 13',40,2594,1751442283.9144423),(12,'sensor 14',37,1259,1751442676.9903526),(13,'sensor 15',33,400,1751410795.6890612),(14,'sensor 16',40,2063,1751435728.7883086),(15,'sensor 17',37,892,1751442683.7031353),(16,'sensor 18',30,579,1751442682.988668),(17,'sensor 19',36,1115,1751442682.2475543),(18,'sensor 20',41,966,1751442676.493528),(19,'sensor 21',42,904,1751442678.8176098),(20,'sensor 22',39,1182,1751442681.5826306),(21,'sensor 23',34,568,1751442678.5651016),(22,'sensor 24',37,400,1751424181.4288502),(23,'sensor 25',33,451,1751442684.5794046),(24,'sensor 26',26,473,1750407948.3266215),(25,'sensor 27',35,1475,1751442685.2093651),(26,'sensor 28',33,674,1751442679.3069885),(27,'sensor 29',36,777,1751442678.9421227),(28,'sensor 30',26,400,1750638852.1493876),(29,'sensor 04',39,974,1751435774.995807),(30,'sensor 05',33,589,1749270500.9557054),(32,'sensor 31',30,400,1751379760.7147522),(34,'sensor 33',36,400,1751433033.2463439),(35,'sensor 32',40,961,1751428022.7420816),(36,'sensor 34',38,801,1751433529.216948),(37,'sensor 35',30,469,1750584016.8918035),(38,'sensor 36',21,530,1737192955.0382178),(40,'sensor 37',21,473,1737441098.3915067),(41,'sensor 38',19,0,1737445318.8070745),(42,'sensor 39',19,400,1737447133.118047),(43,'sensor 40',19,400,1737450431.2693892);
+/*!40000 ALTER TABLE `sensor_sensor_check_db` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `sensor_sensor_data`
+--
+
+DROP TABLE IF EXISTS `sensor_sensor_data`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `sensor_sensor_data` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `mac` varchar(100) NOT NULL,
+  `receiver` varchar(100) NOT NULL,
+  `mode` varchar(20) NOT NULL,
+  `temperature` double NOT NULL,
+  `co2` int(11) NOT NULL,
+  `sensing_time` double NOT NULL,
+  `sensor` varchar(100) NOT NULL,
+  `rssi` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=39226292 DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `sensor_sensor_data`
+--
