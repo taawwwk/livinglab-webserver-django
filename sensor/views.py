@@ -121,6 +121,7 @@ def receive_sensor_data(request):
         }, status=400)
 
 
+@require_http_methods(["GET"])
 def record_sensor_ip(request):
     """센서 IP 기록"""
     try:
