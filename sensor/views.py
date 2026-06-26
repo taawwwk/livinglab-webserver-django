@@ -6,17 +6,21 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 import time
+import logging
 from datetime import datetime, timedelta
 
 from .models import SensorData, IpDb, SensorCheckDb, MobileCheckDb, SensorLocation
+
+logger = logging.getLogger(__name__)
 
 
 @require_http_methods(["GET"])
 def sensor_sensing(request):
     """센서 데이터 수신 및 IP/위치 관리 (멀티 퍼포즈 엔드포인트)"""
+    logger.debug(f"sensor_sensing called with params: {dict(request.GET)}")
 
     # 센서 데이터 수신 (temperature, co2, time 포함)
-    if 'temp' in request.GET and 'co2' in request.GET and 'time' in request.GET:
+    if all(k in request.GET for k in ['temp', 'co2', 'time']):
         return receive_sensor_data(request)
 
     # IP 기록 (ip 파라미터 포함)
@@ -24,27 +28,52 @@ def sensor_sensing(request):
         return record_sensor_ip(request)
 
     # 위치 설정 (latitude, longitude 포함)
-    elif 'latitude' in request.GET and 'longitude' in request.GET:
+    elif all(k in request.GET for k in ['latitude', 'longitude']):
         return set_sensor_location(request)
 
     else:
-        return JsonResponse({'error': 'Invalid parameters'}, status=400)
+        available_params = list(request.GET.keys())
+        return JsonResponse({
+            'error': 'Invalid parameters',
+            'received': available_params,
+            'message': 'Provide either (temp+co2+time) for sensor data, (ip) for IP, or (latitude+longitude) for location'
+        }, status=400)
 
 
 def receive_sensor_data(request):
     """센서 데이터 수신"""
     try:
-        mac = request.GET.get('mac', '')
-        sensor = request.GET.get('sensor', '')
-        sender = request.GET.get('sender', '')
-        mode = request.GET.get('mode', 'direct')
-        temp = float(request.GET.get('temp', 0))
-        co2 = int(request.GET.get('co2', 0))
-        sensing_time = float(request.GET.get('time', time.time()))
+        # 필수 파라미터 검증
+        required = ['mac', 'sensor', 'sender', 'temp', 'co2', 'time']
+        missing = [p for p in required if p not in request.GET]
+        if missing:
+            return JsonResponse({
+                'error': 'Missing required parameters',
+                'missing': missing
+            }, status=400)
+
+        mac = request.GET.get('mac').strip()
+        sensor = request.GET.get('sensor').strip()
+        sender = request.GET.get('sender').strip()
+        mode = request.GET.get('mode', 'direct').strip()
+
+        try:
+            temp = float(request.GET.get('temp'))
+            co2 = int(request.GET.get('co2'))
+            sensing_time = float(request.GET.get('time'))
+        except (ValueError, TypeError) as e:
+            return JsonResponse({
+                'error': 'Invalid data types',
+                'details': f'temp must be float, co2 must be int, time must be float. Error: {str(e)}'
+            }, status=400)
+
         rssi = request.GET.get('rssi')
 
-        if not mac or not sensor or not sender:
-            return JsonResponse({'error': 'Missing required parameters'}, status=400)
+        if not all([mac, sensor, sender]):
+            return JsonResponse({
+                'error': 'Empty required parameters',
+                'details': f'mac={bool(mac)}, sensor={bool(sensor)}, sender={bool(sender)}'
+            }, status=400)
 
         # 원시 데이터 저장
         data = SensorData.objects.create(
@@ -57,6 +86,8 @@ def receive_sensor_data(request):
             sensing_time=sensing_time,
             rssi=int(rssi) if rssi else None,
         )
+
+        logger.info(f"Sensor data saved: {sensor} - temp={temp}, co2={co2}")
 
         # 최신 상태 스냅샷 업데이트
         if mode == 'direct':
@@ -80,20 +111,27 @@ def receive_sensor_data(request):
                 }
             )
 
-        return JsonResponse({'status': 'success', 'message': 'Data received'})
+        return JsonResponse({'status': 'success', 'message': 'Data received', 'id': data.id})
 
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
+        logger.exception(f"Error receiving sensor data: {str(e)}")
+        return JsonResponse({
+            'error': 'Server error',
+            'details': str(e) if logger.isEnabledFor(logging.DEBUG) else 'Internal error'
+        }, status=400)
 
 
 def record_sensor_ip(request):
     """센서 IP 기록"""
     try:
-        sensor = request.GET.get('sensor', '')
-        ip = request.GET.get('ip', '')
+        sensor = request.GET.get('sensor', '').strip()
+        ip = request.GET.get('ip', '').strip()
 
         if not sensor or not ip:
-            return JsonResponse({'error': 'Missing required parameters'}, status=400)
+            return JsonResponse({
+                'error': 'Missing required parameters',
+                'required': ['sensor', 'ip']
+            }, status=400)
 
         IpDb.objects.create(
             sensor=sensor,
@@ -101,21 +139,32 @@ def record_sensor_ip(request):
             time=int(time.time()),
         )
 
+        logger.info(f"IP recorded: {sensor} -> {ip}")
         return JsonResponse({'status': 'success', 'message': 'IP recorded'})
 
     except Exception as e:
+        logger.exception(f"Error recording IP: {str(e)}")
         return JsonResponse({'error': str(e)}, status=400)
 
 
 def set_sensor_location(request):
     """센서 위치 설정"""
     try:
-        sensor = request.GET.get('sensor', '')
-        latitude = float(request.GET.get('latitude', 0))
-        longitude = float(request.GET.get('longitude', 0))
+        sensor = request.GET.get('sensor', '').strip()
 
         if not sensor:
-            return JsonResponse({'error': 'Missing sensor parameter'}, status=400)
+            return JsonResponse({
+                'error': 'Missing sensor parameter'
+            }, status=400)
+
+        try:
+            latitude = float(request.GET.get('latitude'))
+            longitude = float(request.GET.get('longitude'))
+        except (ValueError, TypeError) as e:
+            return JsonResponse({
+                'error': 'Invalid coordinate format',
+                'details': 'latitude and longitude must be valid floats'
+            }, status=400)
 
         location, created = SensorLocation.objects.update_or_create(
             sensor=sensor,
@@ -125,9 +174,16 @@ def set_sensor_location(request):
             }
         )
 
-        return JsonResponse({'status': 'success', 'message': 'Location set'})
+        action = 'created' if created else 'updated'
+        logger.info(f"Location {action}: {sensor} ({latitude}, {longitude})")
+        return JsonResponse({
+            'status': 'success',
+            'message': f'Location {action}',
+            'action': action
+        })
 
     except Exception as e:
+        logger.exception(f"Error setting location: {str(e)}")
         return JsonResponse({'error': str(e)}, status=400)
 
 
