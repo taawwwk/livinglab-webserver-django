@@ -7,11 +7,31 @@ from rest_framework.response import Response
 from rest_framework import status
 import time
 import logging
+import re
 from datetime import datetime, timedelta
 
 from .models import SensorData, IpDb, SensorCheckDb, MobileCheckDb, SensorLocation
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_sensor_name(sensor_name):
+    """
+    센서 이름 정규화
+    sensor1, sensor 1, sensor01, sensor 01 → sensor 01
+    """
+    if not sensor_name:
+        return sensor_name
+
+    sensor_name = sensor_name.strip().lower()
+
+    # 숫자만 추출
+    match = re.search(r'(\d+)', sensor_name)
+    if match:
+        num = int(match.group(1))
+        return f"sensor {num:02d}"
+
+    return sensor_name
 
 
 @require_http_methods(["GET"])
@@ -53,7 +73,7 @@ def receive_sensor_data(request):
             }, status=400)
 
         mac = request.GET.get('mac').strip()
-        sensor = request.GET.get('sensor').strip()
+        sensor = normalize_sensor_name(request.GET.get('sensor'))
         sender = request.GET.get('sender').strip()
         mode = request.GET.get('mode', 'direct').strip()
 
@@ -125,7 +145,7 @@ def receive_sensor_data(request):
 def record_sensor_ip(request):
     """센서 IP 기록"""
     try:
-        sensor = request.GET.get('sensor', '').strip()
+        sensor = normalize_sensor_name(request.GET.get('sensor', ''))
         ip = request.GET.get('ip', '').strip()
 
         if not sensor or not ip:
@@ -151,7 +171,7 @@ def record_sensor_ip(request):
 def set_sensor_location(request):
     """센서 위치 설정"""
     try:
-        sensor = request.GET.get('sensor', '').strip()
+        sensor = normalize_sensor_name(request.GET.get('sensor', ''))
 
         if not sensor:
             return JsonResponse({
