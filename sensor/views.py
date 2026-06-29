@@ -347,23 +347,23 @@ def fetch_pws_data():
 
             # PWSObservation 저장 (원시 데이터)
             obs_time = datetime.fromisoformat(obs['obsTimeUtc'].replace('Z', '+00:00'))
-            imperial = obs.get('imperial', {})
+            metric = obs.get('metric', {})
 
             PWSObservation.objects.create(
                 stationID=station_id,
                 obsTimeUtc=obs_time,
                 obsTimeLocal=obs.get('obsTimeLocal', ''),
-                temperature=imperial.get('temp'),
-                dewpoint=imperial.get('dewpt'),
-                heatIndex=imperial.get('heatIndex'),
-                windChill=imperial.get('windChill'),
+                temperature=metric.get('temp'),
+                dewpoint=metric.get('dewpt'),
+                heatIndex=metric.get('heatIndex'),
+                windChill=metric.get('windChill'),
                 humidity=obs.get('humidity'),
-                pressure=imperial.get('pressure'),
-                windSpeed=imperial.get('windSpeed'),
-                windGust=imperial.get('windGust'),
+                pressure=metric.get('pressure'),
+                windSpeed=metric.get('windSpeed'),
+                windGust=metric.get('windGust'),
                 winddir=obs.get('winddir'),
-                precipRate=imperial.get('precipRate'),
-                precipTotal=imperial.get('precipTotal'),
+                precipRate=metric.get('precipRate'),
+                precipTotal=metric.get('precipTotal'),
                 solarRadiation=obs.get('solarRadiation'),
                 uv=obs.get('uv'),
                 qcStatus=obs.get('qcStatus', -1),
@@ -374,15 +374,15 @@ def fetch_pws_data():
                 stationID=station_id,
                 defaults={
                     'obsTimeUtc': obs_time,
-                    'temperature': imperial.get('temp'),
+                    'temperature': metric.get('temp'),
                     'humidity': obs.get('humidity'),
-                    'pressure': imperial.get('pressure'),
-                    'windSpeed': imperial.get('windSpeed'),
-                    'windGust': imperial.get('windGust'),
+                    'pressure': metric.get('pressure'),
+                    'windSpeed': metric.get('windSpeed'),
+                    'windGust': metric.get('windGust'),
                     'winddir': obs.get('winddir'),
-                    'precipRate': imperial.get('precipRate'),
-                    'dewpoint': imperial.get('dewpt'),
-                    'heatIndex': imperial.get('heatIndex'),
+                    'precipRate': metric.get('precipRate'),
+                    'dewpoint': metric.get('dewpt'),
+                    'heatIndex': metric.get('heatIndex'),
                 }
             )
 
