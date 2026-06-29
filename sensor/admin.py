@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import SensorData, IpDb, SensorCheckDb, MobileCheckDb, SensorLocation
+from .models import SensorData, IpDb, SensorCheckDb, MobileCheckDb, SensorLocation, PWSStation, PWSObservation, PWSLatest
 
 
 @admin.register(SensorData)
@@ -37,3 +37,26 @@ class MobileCheckDbAdmin(admin.ModelAdmin):
 class SensorLocationAdmin(admin.ModelAdmin):
     list_display = ('sensor', 'latitude', 'longitude')
     search_fields = ('sensor',)
+
+
+@admin.register(PWSStation)
+class PWSStationAdmin(admin.ModelAdmin):
+    list_display = ('stationID', 'stationName', 'neighborhood', 'country', 'latitude', 'longitude')
+    search_fields = ('stationID', 'stationName')
+    readonly_fields = ('createdAt', 'updatedAt')
+
+
+@admin.register(PWSObservation)
+class PWSObservationAdmin(admin.ModelAdmin):
+    list_display = ('stationID', 'obsTimeUtc', 'temperature', 'humidity', 'windSpeed', 'qcStatus')
+    list_filter = ('stationID', 'obsTimeUtc', 'qcStatus')
+    search_fields = ('stationID',)
+    readonly_fields = ('obsTimeUtc',)
+    date_hierarchy = 'obsTimeUtc'
+
+
+@admin.register(PWSLatest)
+class PWSLatestAdmin(admin.ModelAdmin):
+    list_display = ('stationID', 'obsTimeUtc', 'temperature', 'humidity', 'windSpeed', 'pressure')
+    search_fields = ('stationID',)
+    readonly_fields = ('updatedAt',)

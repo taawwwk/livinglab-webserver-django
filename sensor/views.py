@@ -8,9 +8,10 @@ from rest_framework import status
 import time
 import logging
 import re
+import requests
 from datetime import datetime, timedelta
 
-from .models import SensorData, IpDb, SensorCheckDb, MobileCheckDb, SensorLocation
+from .models import SensorData, IpDb, SensorCheckDb, MobileCheckDb, SensorLocation, PWSObservation, PWSLatest, PWSStation
 
 logger = logging.getLogger(__name__)
 
@@ -301,3 +302,93 @@ def latest_sensor_ips(request):
             }
 
     return Response(list(latest_ips.values()))
+
+
+def fetch_pws_data():
+    """PWS API에서 데이터 수집 (자동 호출용)"""
+    API_KEY = "272cc24526044000acc2452604300041"
+    STATION_IDS = ["ICHEON28", "ICHEONGJ6", "ICHEON24"]
+    API_URL = "https://api.weather.com/v2/pws/observations/current"
+
+    for station_id in STATION_IDS:
+        try:
+            params = {
+                'stationId': station_id,
+                'format': 'json',
+                'units': 'm',  # Metric
+                'apiKey': API_KEY,
+                'numericPrecision': 'decimal'
+            }
+
+            response = requests.get(API_URL, params=params, timeout=10)
+            response.raise_for_status()
+
+            data = response.json()
+
+            if 'observations' not in data or len(data['observations']) == 0:
+                logger.warning(f"PWS {station_id}: No observations returned")
+                continue
+
+            obs = data['observations'][0]
+
+            # PWSStation 업데이트 (메타데이터)
+            station, created = PWSStation.objects.update_or_create(
+                stationID=station_id,
+                defaults={
+                    'stationName': obs.get('neighborhood', ''),
+                    'neighborhood': obs.get('neighborhood', ''),
+                    'country': obs.get('country', ''),
+                    'latitude': obs.get('lat', 0),
+                    'longitude': obs.get('lon', 0),
+                    'elevation': obs.get('imperial', {}).get('elev'),
+                    'softwareType': obs.get('softwareType', ''),
+                }
+            )
+
+            # PWSObservation 저장 (원시 데이터)
+            obs_time = datetime.fromisoformat(obs['obsTimeUtc'].replace('Z', '+00:00'))
+            imperial = obs.get('imperial', {})
+
+            PWSObservation.objects.create(
+                stationID=station_id,
+                obsTimeUtc=obs_time,
+                obsTimeLocal=obs.get('obsTimeLocal', ''),
+                temperature=imperial.get('temp'),
+                dewpoint=imperial.get('dewpt'),
+                heatIndex=imperial.get('heatIndex'),
+                windChill=imperial.get('windChill'),
+                humidity=obs.get('humidity'),
+                pressure=imperial.get('pressure'),
+                windSpeed=imperial.get('windSpeed'),
+                windGust=imperial.get('windGust'),
+                winddir=obs.get('winddir'),
+                precipRate=imperial.get('precipRate'),
+                precipTotal=imperial.get('precipTotal'),
+                solarRadiation=obs.get('solarRadiation'),
+                uv=obs.get('uv'),
+                qcStatus=obs.get('qcStatus', -1),
+            )
+
+            # PWSLatest 업데이트 (최신 스냅샷)
+            PWSLatest.objects.update_or_create(
+                stationID=station_id,
+                defaults={
+                    'obsTimeUtc': obs_time,
+                    'temperature': imperial.get('temp'),
+                    'humidity': obs.get('humidity'),
+                    'pressure': imperial.get('pressure'),
+                    'windSpeed': imperial.get('windSpeed'),
+                    'windGust': imperial.get('windGust'),
+                    'winddir': obs.get('winddir'),
+                    'precipRate': imperial.get('precipRate'),
+                    'dewpoint': imperial.get('dewpt'),
+                    'heatIndex': imperial.get('heatIndex'),
+                }
+            )
+
+            logger.info(f"PWS {station_id}: Data saved successfully")
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"PWS {station_id}: Request error - {str(e)}")
+        except Exception as e:
+            logger.exception(f"PWS {station_id}: Error - {str(e)}")

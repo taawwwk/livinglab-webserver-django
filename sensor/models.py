@@ -86,3 +86,95 @@ class SensorLocation(models.Model):
 
     def __str__(self):
         return f"{self.sensor} ({self.latitude}, {self.longitude})"
+
+
+class PWSStation(models.Model):
+    """PWS 스테이션 메타데이터"""
+    stationID = models.CharField(max_length=100, unique=True)
+    stationName = models.CharField(max_length=200, blank=True)
+    neighborhood = models.CharField(max_length=200, blank=True)
+    country = models.CharField(max_length=10, blank=True)
+    latitude = models.FloatField()
+    longitude = models.FloatField()
+    elevation = models.FloatField(null=True, blank=True)
+    softwareType = models.CharField(max_length=100, blank=True)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'pws_station'
+        verbose_name = 'PWS Station'
+        verbose_name_plural = 'PWS Stations'
+
+    def __str__(self):
+        return f"{self.stationID} - {self.stationName}"
+
+
+class PWSObservation(models.Model):
+    """PWS 원시 관측 데이터 (시계열 대용량)"""
+    stationID = models.CharField(max_length=100, db_index=True)
+    obsTimeUtc = models.DateTimeField(db_index=True)
+    obsTimeLocal = models.CharField(max_length=100)
+
+    # 온도/습도
+    temperature = models.FloatField(null=True, blank=True)
+    dewpoint = models.FloatField(null=True, blank=True)
+    heatIndex = models.FloatField(null=True, blank=True)
+    windChill = models.FloatField(null=True, blank=True)
+    humidity = models.IntegerField(null=True, blank=True)
+
+    # 기압
+    pressure = models.FloatField(null=True, blank=True)
+
+    # 풍속/풍향
+    windSpeed = models.FloatField(null=True, blank=True)
+    windGust = models.FloatField(null=True, blank=True)
+    winddir = models.IntegerField(null=True, blank=True)
+
+    # 강수량
+    precipRate = models.FloatField(null=True, blank=True)
+    precipTotal = models.FloatField(null=True, blank=True)
+
+    # 태양/자외선
+    solarRadiation = models.FloatField(null=True, blank=True)
+    uv = models.FloatField(null=True, blank=True)
+
+    # 품질 체크
+    qcStatus = models.IntegerField(default=-1)
+
+    class Meta:
+        db_table = 'pws_observation'
+        verbose_name = 'PWS Observation'
+        verbose_name_plural = 'PWS Observations'
+        indexes = [
+            models.Index(fields=['stationID', 'obsTimeUtc']),
+            models.Index(fields=['stationID']),
+            models.Index(fields=['obsTimeUtc']),
+        ]
+
+    def __str__(self):
+        return f"{self.stationID} - {self.obsTimeUtc}"
+
+
+class PWSLatest(models.Model):
+    """PWS 최신 데이터 스냅샷 (빠른 조회)"""
+    stationID = models.CharField(max_length=100, unique=True)
+    obsTimeUtc = models.DateTimeField()
+    temperature = models.FloatField(null=True, blank=True)
+    humidity = models.IntegerField(null=True, blank=True)
+    pressure = models.FloatField(null=True, blank=True)
+    windSpeed = models.FloatField(null=True, blank=True)
+    windGust = models.FloatField(null=True, blank=True)
+    winddir = models.IntegerField(null=True, blank=True)
+    precipRate = models.FloatField(null=True, blank=True)
+    dewpoint = models.FloatField(null=True, blank=True)
+    heatIndex = models.FloatField(null=True, blank=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'pws_latest'
+        verbose_name = 'PWS Latest'
+        verbose_name_plural = 'PWS Latest'
+
+    def __str__(self):
+        return f"{self.stationID} - {self.obsTimeUtc}"

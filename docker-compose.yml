@@ -50,8 +50,6 @@ services:
         max-size: "10m"
         max-file: "7"
 
-      
-
 networks:
   livinglab_network:
     driver: bridge
