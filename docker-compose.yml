@@ -44,6 +44,13 @@ services:
       - /mnt/storage/livinglab/staticfiles:/app/staticfiles
     networks:
       - livinglab_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "7"
+
+      
 
 networks:
   livinglab_network:
