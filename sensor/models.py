@@ -91,13 +91,13 @@ class SensorLocation(models.Model):
 class PWSStation(models.Model):
     """PWS 스테이션 메타데이터"""
     stationID = models.CharField(max_length=100, unique=True)
-    stationName = models.CharField(max_length=200, blank=True)
-    neighborhood = models.CharField(max_length=200, blank=True)
-    country = models.CharField(max_length=10, blank=True)
+    stationName = models.CharField(max_length=200, blank=True, default='')
+    neighborhood = models.CharField(max_length=200, blank=True, default='')
+    country = models.CharField(max_length=10, blank=True, default='')
     latitude = models.FloatField()
     longitude = models.FloatField()
     elevation = models.FloatField(null=True, blank=True)
-    softwareType = models.CharField(max_length=100, blank=True)
+    softwareType = models.CharField(max_length=100, blank=True, default='')
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
 
