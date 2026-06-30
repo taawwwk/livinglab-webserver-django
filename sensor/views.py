@@ -339,13 +339,13 @@ def fetch_pws_data():
             station, created = PWSStation.objects.update_or_create(
                 stationID=station_id,
                 defaults={
-                    'stationName': obs.get('neighborhood', ''),
-                    'neighborhood': obs.get('neighborhood', ''),
-                    'country': obs.get('country', ''),
+                    'stationName': obs.get('neighborhood') or '',
+                    'neighborhood': obs.get('neighborhood') or '',
+                    'country': obs.get('country') or '',
                     'latitude': obs.get('lat', 0),
                     'longitude': obs.get('lon', 0),
                     'elevation': obs.get('imperial', {}).get('elev'),
-                    'softwareType': obs.get('softwareType', ''),
+                    'softwareType': obs.get('softwareType') or '',
                 }
             )
 
