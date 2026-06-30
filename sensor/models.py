@@ -178,3 +178,51 @@ class PWSLatest(models.Model):
 
     def __str__(self):
         return f"{self.stationID} - {self.obsTimeUtc}"
+
+
+class CCTVStation(models.Model):
+    """CCTV 스테이션 메타데이터"""
+    cctvID = models.CharField(max_length=100, unique=True)
+    pws_station = models.CharField(max_length=100)
+    url = models.URLField()
+    location_name = models.CharField(max_length=200, blank=True)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'cctv_station'
+        verbose_name = 'CCTV Station'
+        verbose_name_plural = 'CCTV Stations'
+
+    def __str__(self):
+        return f"{self.cctvID} ({self.pws_station})"
+
+
+class CCTVRecording(models.Model):
+    """CCTV 녹화 기록"""
+    STATUS_CHOICES = [
+        ('recording', 'Recording'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ]
+
+    cctv_station = models.ForeignKey(CCTVStation, on_delete=models.CASCADE)
+    start_time = models.DateTimeField(auto_now_add=True)
+    end_time = models.DateTimeField(null=True, blank=True)
+    file_path = models.CharField(max_length=500, blank=True)
+    precipRate_trigger = models.FloatField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='recording')
+    duration_minutes = models.IntegerField(null=True, blank=True)
+    file_size_mb = models.FloatField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'cctv_recording'
+        verbose_name = 'CCTV Recording'
+        verbose_name_plural = 'CCTV Recordings'
+        indexes = [
+            models.Index(fields=['cctv_station', 'start_time']),
+            models.Index(fields=['status']),
+        ]
+
+    def __str__(self):
+        return f"{self.cctv_station.cctvID} - {self.start_time}"

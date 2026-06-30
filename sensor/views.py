@@ -2,6 +2,7 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.db.models import F, Q
+from django.utils import timezone
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -9,9 +10,12 @@ import time
 import logging
 import re
 import requests
+import subprocess
+import os
 from datetime import datetime, timedelta
+from pathlib import Path
 
-from .models import SensorData, IpDb, SensorCheckDb, MobileCheckDb, SensorLocation, PWSObservation, PWSLatest, PWSStation
+from .models import SensorData, IpDb, SensorCheckDb, MobileCheckDb, SensorLocation, PWSObservation, PWSLatest, PWSStation, CCTVStation, CCTVRecording
 
 logger = logging.getLogger(__name__)
 
@@ -392,3 +396,180 @@ def fetch_pws_data():
             logger.error(f"PWS {station_id}: Request error - {str(e)}")
         except Exception as e:
             logger.exception(f"PWS {station_id}: Error - {str(e)}")
+
+
+CCTV_CONFIG = {
+    'precipRate_threshold': 1.0,
+    'min_duration': 1800,
+    'max_duration': 7200,
+    'resolution': '720x480',
+    'codec': 'h264',
+    'bitrate': '1500k',
+}
+
+CCTV_STATIONS = {
+    'ICHEONGJ6': {
+        'cctvID': 'ICHEON_J6',
+        'url': 'http://211.236.64.77:1935/91/playlist.m3u8',
+        'location': 'Icheon J6',
+    },
+    'ICHEON24': {
+        'cctvID': 'ICHEON_24',
+        'url': 'http://211.236.64.77:1935/124/playlist.m3u8',
+        'location': 'Icheon 24',
+    },
+    'ICHEON28': [
+        {
+            'cctvID': 'ICHEON_28_A',
+            'url': 'http://211.236.64.77:1935/108/playlist.m3u8',
+            'location': 'Icheon 28-A',
+        },
+        {
+            'cctvID': 'ICHEON_28_B',
+            'url': 'http://211.236.64.77:1935/110/playlist.m3u8',
+            'location': 'Icheon 28-B',
+        },
+    ],
+}
+
+cctv_processes = {}
+
+
+def start_cctv_recording(cctv_station_id, precipRate):
+    """CCTV 녹화 시작"""
+    try:
+        cctv = CCTVStation.objects.get(cctvID=cctv_station_id)
+
+        # 녹화 디렉토리 생성
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        output_dir = f"/mnt/storage/cctv/{cctv.pws_station}/{timestamp}"
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+        output_file = f"{output_dir}/recording.mp4"
+
+        # ffmpeg 명령어
+        cmd = [
+            'ffmpeg',
+            '-i', cctv.url,
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-b:v', CCTV_CONFIG['bitrate'],
+            '-c:a', 'aac',
+            '-t', str(CCTV_CONFIG['max_duration']),
+            '-y',
+            output_file,
+        ]
+
+        # ffmpeg 프로세스 시작
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        cctv_processes[cctv_station_id] = {
+            'process': process,
+            'file_path': output_file,
+            'output_dir': output_dir,
+        }
+
+        # 녹화 기록 생성
+        CCTVRecording.objects.create(
+            cctv_station=cctv,
+            file_path=output_file,
+            precipRate_trigger=precipRate,
+            status='recording',
+        )
+
+        logger.info(f"CCTV {cctv_station_id}: Recording started (precipRate={precipRate}mm/hr)")
+
+    except CCTVStation.DoesNotExist:
+        logger.error(f"CCTV {cctv_station_id}: Station not found")
+    except Exception as e:
+        logger.exception(f"CCTV {cctv_station_id}: Error starting recording - {str(e)}")
+
+
+def stop_cctv_recording(cctv_station_id, status='completed'):
+    """CCTV 녹화 종료"""
+    try:
+        if cctv_station_id not in cctv_processes:
+            return
+
+        process_info = cctv_processes[cctv_station_id]
+        process = process_info['process']
+
+        # ffmpeg 프로세스 종료
+        process.terminate()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+
+        # 파일 크기 계산
+        file_path = process_info['file_path']
+        file_size_mb = 0
+        if os.path.exists(file_path):
+            file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+
+        # 녹화 기록 업데이트
+        recording = CCTVRecording.objects.filter(
+            file_path=file_path,
+            status='recording'
+        ).first()
+
+        if recording:
+            recording.end_time = timezone.now()
+            recording.status = status
+            if recording.start_time:
+                duration = (recording.end_time - recording.start_time).total_seconds() / 60
+                recording.duration_minutes = int(duration)
+            recording.file_size_mb = file_size_mb
+            recording.save()
+
+        del cctv_processes[cctv_station_id]
+
+        logger.info(f"CCTV {cctv_station_id}: Recording stopped ({file_size_mb:.2f}MB, status={status})")
+
+    except Exception as e:
+        logger.exception(f"CCTV {cctv_station_id}: Error stopping recording - {str(e)}")
+
+
+def monitor_preciprate_and_cctv():
+    """강수량 모니터링 및 CCTV 자동 제어"""
+    try:
+        # PWS 최신 데이터 조회
+        pws_stations = PWSLatest.objects.all()
+
+        for pws in pws_stations:
+            precipRate = pws.precipRate or 0
+            threshold = CCTV_CONFIG['precipRate_threshold']
+
+            # CCTV 설정 찾기
+            cctv_config = CCTV_STATIONS.get(pws.stationID)
+            if not cctv_config:
+                continue
+
+            # ICHEON28은 리스트, 나머지는 딕셔너리
+            if isinstance(cctv_config, list):
+                cctv_list = cctv_config
+            else:
+                cctv_list = [cctv_config]
+
+            for cctv_info in cctv_list:
+                cctv_id = cctv_info['cctvID']
+
+                # 강수량 초과: 녹화 시작
+                if precipRate > threshold:
+                    if cctv_id not in cctv_processes:
+                        # 스테이션 정보 저장 (없으면 생성)
+                        CCTVStation.objects.get_or_create(
+                            cctvID=cctv_id,
+                            defaults={
+                                'pws_station': pws.stationID,
+                                'url': cctv_info['url'],
+                                'location_name': cctv_info['location'],
+                            }
+                        )
+                        start_cctv_recording(cctv_id, precipRate)
+
+                # 강수량 정상: 녹화 중이면 종료
+                elif cctv_id in cctv_processes:
+                    stop_cctv_recording(cctv_id, status='completed')
+
+    except Exception as e:
+        logger.exception(f"CCTV monitoring error: {str(e)}")

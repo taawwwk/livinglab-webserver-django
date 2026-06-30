@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import SensorData, IpDb, SensorCheckDb, MobileCheckDb, SensorLocation, PWSStation, PWSObservation, PWSLatest
+from .models import SensorData, IpDb, SensorCheckDb, MobileCheckDb, SensorLocation, PWSStation, PWSObservation, PWSLatest, CCTVStation, CCTVRecording
 
 
 @admin.register(SensorData)
@@ -60,3 +60,19 @@ class PWSLatestAdmin(admin.ModelAdmin):
     list_display = ('stationID', 'obsTimeUtc', 'temperature', 'humidity', 'windSpeed', 'pressure')
     search_fields = ('stationID',)
     readonly_fields = ('updatedAt',)
+
+
+@admin.register(CCTVStation)
+class CCTVStationAdmin(admin.ModelAdmin):
+    list_display = ('cctvID', 'pws_station', 'location_name', 'url')
+    search_fields = ('cctvID', 'pws_station')
+    readonly_fields = ('createdAt', 'updatedAt')
+
+
+@admin.register(CCTVRecording)
+class CCTVRecordingAdmin(admin.ModelAdmin):
+    list_display = ('cctv_station', 'start_time', 'end_time', 'status', 'precipRate_trigger', 'duration_minutes')
+    list_filter = ('status', 'start_time', 'cctv_station')
+    search_fields = ('cctv_station__cctvID',)
+    readonly_fields = ('start_time',)
+    date_hierarchy = 'start_time'
