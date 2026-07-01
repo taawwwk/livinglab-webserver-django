@@ -447,14 +447,12 @@ def start_cctv_recording(cctv_station_id, precipRate):
 
         output_file = f"{output_dir}/recording.mp4"
 
-        # ffmpeg 명령어
+        # ffmpeg 명령어 (원본 스트림 복사)
         cmd = [
             'ffmpeg',
             '-i', cctv.url,
-            '-c:v', 'libx264',
-            '-preset', 'ultrafast',
-            '-b:v', CCTV_CONFIG['bitrate'],
-            '-c:a', 'aac',
+            '-c:v', 'copy',
+            '-c:a', 'copy',
             '-t', str(CCTV_CONFIG['max_duration']),
             '-y',
             output_file,
