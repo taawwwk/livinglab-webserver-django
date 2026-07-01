@@ -399,7 +399,7 @@ def fetch_pws_data():
 
 
 CCTV_CONFIG = {
-    'precipRate_threshold': 1.0,
+    'precipRate_threshold': 0.1,
     'min_duration': 1800,
     'max_duration': 7200,
     'resolution': '720x480',
@@ -411,23 +411,23 @@ CCTV_STATIONS = {
     'ICHEONGJ6': {
         'cctvID': 'ICHEON_J6',
         'url': 'http://211.236.64.77:1935/91/playlist.m3u8',
-        'location': 'Icheon J6',
+        'location': 'Sangdang-Sageori',
     },
     'ICHEON24': {
         'cctvID': 'ICHEON_24',
         'url': 'http://211.236.64.77:1935/124/playlist.m3u8',
-        'location': 'Icheon 24',
+        'location': 'Heungdeok-Sageori',
     },
     'ICHEON28': [
         {
             'cctvID': 'ICHEON_28_A',
             'url': 'http://211.236.64.77:1935/108/playlist.m3u8',
-            'location': 'Icheon 28-A',
+            'location': 'Sachang-Sageori',
         },
         {
             'cctvID': 'ICHEON_28_B',
             'url': 'http://211.236.64.77:1935/110/playlist.m3u8',
-            'location': 'Icheon 28-B',
+            'location': 'Gaesin-Ogeori',
         },
     ],
 }
