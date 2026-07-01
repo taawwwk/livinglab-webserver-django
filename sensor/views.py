@@ -353,24 +353,26 @@ def fetch_pws_data():
             obs_time = datetime.fromisoformat(obs['obsTimeUtc'].replace('Z', '+00:00'))
             metric = obs.get('metric', {})
 
-            PWSObservation.objects.create(
+            PWSObservation.objects.update_or_create(
                 stationID=station_id,
                 obsTimeUtc=obs_time,
-                obsTimeLocal=obs.get('obsTimeLocal', ''),
-                temperature=metric.get('temp'),
-                dewpoint=metric.get('dewpt'),
-                heatIndex=metric.get('heatIndex'),
-                windChill=metric.get('windChill'),
-                humidity=obs.get('humidity'),
-                pressure=metric.get('pressure'),
-                windSpeed=metric.get('windSpeed'),
-                windGust=metric.get('windGust'),
-                winddir=obs.get('winddir'),
-                precipRate=metric.get('precipRate'),
-                precipTotal=metric.get('precipTotal'),
-                solarRadiation=obs.get('solarRadiation'),
-                uv=obs.get('uv'),
-                qcStatus=obs.get('qcStatus', -1),
+                defaults={
+                    'obsTimeLocal': obs.get('obsTimeLocal', ''),
+                    'temperature': metric.get('temp'),
+                    'dewpoint': metric.get('dewpt'),
+                    'heatIndex': metric.get('heatIndex'),
+                    'windChill': metric.get('windChill'),
+                    'humidity': obs.get('humidity'),
+                    'pressure': metric.get('pressure'),
+                    'windSpeed': metric.get('windSpeed'),
+                    'windGust': metric.get('windGust'),
+                    'winddir': obs.get('winddir'),
+                    'precipRate': metric.get('precipRate'),
+                    'precipTotal': metric.get('precipTotal'),
+                    'solarRadiation': obs.get('solarRadiation'),
+                    'uv': obs.get('uv'),
+                    'qcStatus': obs.get('qcStatus', -1),
+                }
             )
 
             # PWSLatest 업데이트 (최신 스냅샷)
