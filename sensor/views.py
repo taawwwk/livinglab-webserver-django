@@ -349,9 +349,15 @@ def fetch_pws_data():
                 }
             )
 
-            # PWSObservation 저장 (원시 데이터)
+            # PWSObservation 저장 (새로운 데이터만)
             obs_time = datetime.fromisoformat(obs['obsTimeUtc'].replace('Z', '+00:00'))
             metric = obs.get('metric', {})
+
+            # 마지막 저장 데이터와 비교 - 새로운 데이터만 저장
+            last = PWSLatest.objects.filter(stationID=station_id).first()
+            if last and last.obsTimeUtc == obs_time:
+                logger.info(f"PWS {station_id}: Data unchanged (obsTimeUtc={obs_time}), skipping save")
+                continue
 
             PWSObservation.objects.update_or_create(
                 stationID=station_id,
@@ -392,7 +398,7 @@ def fetch_pws_data():
                 }
             )
 
-            logger.info(f"PWS {station_id}: Data saved successfully")
+            logger.info(f"PWS {station_id}: New data saved (obsTimeUtc={obs_time})")
 
         except requests.exceptions.RequestException as e:
             logger.error(f"PWS {station_id}: Request error - {str(e)}")

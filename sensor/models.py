@@ -146,6 +146,7 @@ class PWSObservation(models.Model):
         db_table = 'pws_observation'
         verbose_name = 'PWS Observation'
         verbose_name_plural = 'PWS Observations'
+        unique_together = ('stationID', 'obsTimeUtc')
         indexes = [
             models.Index(fields=['stationID', 'obsTimeUtc']),
             models.Index(fields=['stationID']),
