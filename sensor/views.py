@@ -310,7 +310,7 @@ def latest_sensor_ips(request):
 
 def fetch_pws_data():
     """PWS API에서 데이터 수집 (자동 호출용)"""
-    API_KEY = "272cc24526044000acc2452604300041"
+    API_KEY = "0bdb9c7bdcfc41f19b9c7bdcfce1f1c6"
     STATION_IDS = ["ICHEON28", "ICHEONGJ6", "ICHEON24"]
     API_URL = "https://api.weather.com/v2/pws/observations/current"
 
