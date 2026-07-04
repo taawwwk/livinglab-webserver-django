@@ -452,7 +452,7 @@ def start_cctv_recording(cctv_station_id, precipRate):
         output_dir = f"/mnt/storage/cctv/{cctv.pws_station}/{timestamp}"
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-        output_file = f"{output_dir}/recording.mp4"
+        output_file = f"{output_dir}/{cctv.cctvID}.mp4"
 
         # ffmpeg 명령어 (원본 스트림 복사)
         cmd = [
@@ -466,7 +466,9 @@ def start_cctv_recording(cctv_station_id, precipRate):
         ]
 
         # ffmpeg 프로세스 시작
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        # stdout/stderr를 아무도 읽지 않으면 ffmpeg의 진행 로그가 파이프 버퍼를 채워
+        # write()가 블로킹되고 녹화가 통째로 멈춘다 (moov atom 누락의 원인) -> DEVNULL로 버림
+        process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         cctv_processes[cctv_station_id] = {
             'process': process,
             'file_path': output_file,
