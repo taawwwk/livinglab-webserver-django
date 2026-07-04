@@ -1,5 +1,4 @@
 from django.apps import AppConfig
-from apscheduler.schedulers.background import BackgroundScheduler
 
 
 class SensorConfig(AppConfig):
@@ -7,30 +6,6 @@ class SensorConfig(AppConfig):
     name = 'sensor'
     verbose_name = 'Sensor Management'
 
-    def ready(self):
-        from .views import fetch_pws_data, monitor_preciprate_and_cctv
-
-        scheduler = BackgroundScheduler()
-
-        # PWS 데이터 수집: 5분마다
-        scheduler.add_job(
-            fetch_pws_data,
-            'interval',
-            minutes=5,
-            id='pws_data_collection',
-            name='PWS Data Collection',
-            replace_existing=True,
-        )
-
-        # CCTV 강수량 모니터링: 5분마다
-        scheduler.add_job(
-            monitor_preciprate_and_cctv,
-            'interval',
-            minutes=5,
-            id='cctv_monitoring',
-            name='CCTV Precipitation Monitoring',
-            replace_existing=True,
-        )
-
-        if not scheduler.running:
-            scheduler.start()
+    # PWS 데이터 수집 및 CCTV 모니터링은 gunicorn 워커 프로세스가 아니라
+    # `python manage.py runscheduler` 전용 프로세스(scheduler 서비스)에서 단일 실행된다.
+    # 워커마다 ready()가 호출되므로 여기서 스케줄러를 시작하면 워커 수만큼 중복 실행된다.

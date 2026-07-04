@@ -42,6 +42,33 @@ services:
     volumes:
       - /mnt/storage/livinglab/logs:/app/logs
       - /mnt/storage/livinglab/staticfiles:/app/staticfiles
+      - /mnt/storage/cctv:/mnt/storage/cctv
+    networks:
+      - livinglab_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "7"
+
+  scheduler:
+    build: .
+    container_name: livinglab_scheduler
+    command: python manage.py runscheduler
+    environment:
+      DEBUG: "False"
+      DJANGO_SECRET_KEY: "your-secret-key-change-in-production"
+      DB_NAME: livinglab_sensor
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: db
+      DB_PORT: 5432
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - /mnt/storage/livinglab/logs:/app/logs
+      - /mnt/storage/cctv:/mnt/storage/cctv
     networks:
       - livinglab_network
     logging:
