@@ -408,8 +408,7 @@ def fetch_pws_data():
 
 CCTV_CONFIG = {
     'precipRate_threshold': 0.1,
-    'min_duration': 1800,
-    'max_duration': 7200,
+    'segment_duration': 300,  # 5분 단위로 파일 분할
     'resolution': '720x480',
     'codec': 'h264',
     'bitrate': '1500k',
@@ -461,7 +460,7 @@ def start_cctv_recording(cctv_station_id, precipRate):
             '-i', cctv.url,
             '-c:v', 'copy',
             '-c:a', 'copy',
-            '-t', str(CCTV_CONFIG['max_duration']),
+            '-t', str(CCTV_CONFIG['segment_duration']),
             '-y',
             output_file,
         ]
@@ -536,8 +535,14 @@ def stop_cctv_recording(cctv_station_id, status='completed'):
 
 
 def monitor_preciprate_and_cctv():
-    """강수량 모니터링 및 CCTV 자동 제어"""
+    """강수량 모니터링 및 CCTV 자동 제어 (5분 단위 세그먼트 녹화)"""
     try:
+        # 자연 종료된 세그먼트(ffmpeg -t 만료) 정리
+        for cctv_id in list(cctv_processes.keys()):
+            process = cctv_processes[cctv_id]['process']
+            if process.poll() is not None:
+                stop_cctv_recording(cctv_id, status='completed')
+
         # PWS 최신 데이터 조회
         pws_stations = PWSLatest.objects.all()
 

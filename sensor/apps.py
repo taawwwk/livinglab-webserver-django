@@ -12,11 +12,11 @@ class SensorConfig(AppConfig):
 
         scheduler = BackgroundScheduler()
 
-        # PWS 데이터 수집: 10분마다
+        # PWS 데이터 수집: 5분마다
         scheduler.add_job(
             fetch_pws_data,
             'interval',
-            minutes=10,
+            minutes=5,
             id='pws_data_collection',
             name='PWS Data Collection',
             replace_existing=True,
