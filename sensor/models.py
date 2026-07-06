@@ -18,6 +18,7 @@ class SensorData(models.Model):
         verbose_name_plural = 'Sensor Data'
         indexes = [
             models.Index(fields=['sensor', 'sensing_time']),
+            models.Index(fields=['sensing_time']),
         ]
 
     def __str__(self):

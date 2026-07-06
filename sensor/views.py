@@ -1,7 +1,8 @@
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
-from django.db.models import F, Q
+from django.db.models import F, Q, Avg, Count, FloatField, ExpressionWrapper
+from django.db.models.functions import Floor
 from django.utils import timezone
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -12,12 +13,15 @@ import re
 import requests
 import subprocess
 import os
+import pytz
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from .models import SensorData, IpDb, SensorCheckDb, MobileCheckDb, SensorLocation, PWSObservation, PWSLatest, PWSStation, CCTVStation, CCTVRecording
 
 logger = logging.getLogger(__name__)
+
+KST = pytz.timezone('Asia/Seoul')
 
 
 def normalize_sensor_name(sensor_name):
@@ -241,6 +245,7 @@ def sensor_map(request):
                 'co2': sensor_data['co2'],
                 'time': datetime.fromtimestamp(sensor_data['sensing_time']).strftime('%a %b %d %H:%M:%S %Y'),
                 'fresh': is_fresh,
+                'mode': 'direct',
             })
         except SensorLocation.DoesNotExist:
             pass
@@ -260,11 +265,124 @@ def sensor_map(request):
                 'co2': sensor_data['co2'],
                 'time': datetime.fromtimestamp(sensor_data['sensing_time']).strftime('%a %b %d %H:%M:%S %Y'),
                 'fresh': is_fresh,
+                'mode': 'mobile',
             })
         except SensorLocation.DoesNotExist:
             pass
 
     return Response(result)
+
+
+@api_view(['GET'])
+def realtime_stats(request):
+    """실시간 온도/CO2/강수량 평균 통계 (대시보드 상단 카드용)"""
+    now_ts = time.time()
+    fresh_window = 3600  # 1시간 이내 데이터만 유효한 것으로 간주
+
+    direct = SensorCheckDb.objects.filter(sensing_time__gte=now_ts - fresh_window)
+    mobile = MobileCheckDb.objects.filter(sensing_time__gte=now_ts - fresh_window)
+
+    temps = [d.temperature for d in direct] + [m.temperature for m in mobile]
+    co2s = [d.co2 for d in direct] + [m.co2 for m in mobile]
+    precip_values = [p.precipRate for p in PWSLatest.objects.all() if p.precipRate is not None]
+
+    return Response({
+        'temperature': round(sum(temps) / len(temps), 1) if temps else None,
+        'co2': round(sum(co2s) / len(co2s)) if co2s else None,
+        'precipRate': round(sum(precip_values) / len(precip_values), 2) if precip_values else None,
+        'sensor_count': len(temps),
+        'updated_at': datetime.fromtimestamp(now_ts, tz=KST).isoformat(),
+    })
+
+
+def _parse_time_param(value, default):
+    """쿼리 파라미터를 unix timestamp(float)로 변환 (unix timestamp 또는 ISO datetime 문자열 지원)"""
+    if not value:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        pass
+    try:
+        dt = datetime.fromisoformat(value)
+        if dt.tzinfo is None:
+            dt = KST.localize(dt)
+        return dt.timestamp()
+    except ValueError:
+        return default
+
+
+@api_view(['GET'])
+def climate_timeseries(request):
+    """기간별 온도/CO2 시계열 집계 조회 (센서별 또는 전체 평균)"""
+    now_ts = time.time()
+    end = _parse_time_param(request.GET.get('end'), now_ts)
+    start = _parse_time_param(request.GET.get('start'), end - 86400)
+
+    if end <= start:
+        return Response({'error': 'end must be after start'}, status=400)
+
+    span = end - start
+    if span <= 3600:
+        bucket_seconds = 60
+    elif span <= 6 * 3600:
+        bucket_seconds = 300
+    elif span <= 86400:
+        bucket_seconds = 900
+    elif span <= 7 * 86400:
+        bucket_seconds = 3600
+    elif span <= 31 * 86400:
+        bucket_seconds = 21600
+    else:
+        bucket_seconds = 86400
+
+    qs = SensorData.objects.filter(sensing_time__gte=start, sensing_time__lte=end)
+
+    sensors_param = request.GET.get('sensors', '').strip()
+    if sensors_param and sensors_param != 'all':
+        sensor_list = [s.strip() for s in sensors_param.split(',') if s.strip()]
+        qs = qs.filter(sensor__in=sensor_list)
+    else:
+        registered = list(SensorLocation.objects.values_list('sensor', flat=True))
+        qs = qs.filter(sensor__in=registered)
+
+    bucket_expr = ExpressionWrapper(
+        Floor(F('sensing_time') / bucket_seconds) * bucket_seconds,
+        output_field=FloatField(),
+    )
+
+    rows = (
+        qs.annotate(bucket=bucket_expr)
+          .values('bucket')
+          .annotate(avg_temp=Avg('temperature'), avg_co2=Avg('co2'), count=Count('id'))
+          .order_by('bucket')
+    )
+
+    data = [
+        {
+            'time': datetime.fromtimestamp(row['bucket'], tz=KST).isoformat(),
+            'temperature': round(row['avg_temp'], 2) if row['avg_temp'] is not None else None,
+            'co2': round(row['avg_co2'], 1) if row['avg_co2'] is not None else None,
+            'count': row['count'],
+        }
+        for row in rows
+    ]
+
+    return Response({
+        'bucket_seconds': bucket_seconds,
+        'start': start,
+        'end': end,
+        'data': data,
+    })
+
+
+def dashboard(request):
+    """센서맵 + 실시간 통계 + 시계열 분석 통합 대시보드"""
+    sensors = list(SensorLocation.objects.order_by('sensor').values_list('sensor', flat=True))
+    return render(request, 'sensor/dashboard.html', {
+        'sensors': sensors,
+        'naver_map_client_id': 'y79pv4zb9e',
+    })
 
 
 @api_view(['GET'])
