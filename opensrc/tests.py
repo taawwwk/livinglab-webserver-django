@@ -80,6 +80,19 @@ class SubmitTests(TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertFalse(Submission.objects.exists())
 
+    def test_phone_fields_required(self):
+        for field in ('sender', 'lat', 'lon'):
+            data = body()
+            del data[field]
+            r = self.post(data)
+            self.assertEqual(r.status_code, 400)
+            self.assertIn(field, r.json()['message'])
+        r = self.post(body(lat='abc'))
+        self.assertIn('lat', r.json()['message'])
+        self.assertFalse(Submission.objects.exists())
+        # 실내에서 GPS가 안 잡히면 0을 보내도 된다
+        self.assertEqual(self.post(body(lat=0, lon=0)).status_code, 200)
+
     def test_negative_temperature(self):
         v = dict(VALUES, temp=-5.25)
         r = self.post(body(raw=make_raw(v), temp=-5.25))
@@ -96,4 +109,5 @@ class SubmitTests(TestCase):
         self.assertEqual(len(rows), 1)
         csv_body = b''.join(self.client.get('/sensor/opensrc/export.csv?status=verified').streaming_content)
         self.assertIn('team 1'.encode(), csv_body)
+        self.assertIn(b'abcd-1234', csv_body)
         self.assertNotIn('team 2'.encode(), csv_body)

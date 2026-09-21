@@ -90,11 +90,19 @@ def submit(request):
     if not team or not sensor:
         return _fail('team, sensor는 필수입니다')
 
+    # 폰 쪽 정보. 실내에서 GPS가 안 잡히면 lat/lon에 0을 보내도록 안내한다.
+    sender = str(_get(body, 'sender') or '').strip()
+    lat = _to_number(_get(body, 'lat'), float)
+    lon = _to_number(_get(body, 'lon'), float)
+    missing = [k for k, v in (('sender', sender), ('lat', lat), ('lon', lon)) if v in (None, '')]
+    if missing:
+        return _fail('필수 값이 없거나 형식이 잘못되었습니다: ' + ', '.join(missing))
+
     sub = Submission(
         team=team[:100],
         sensor=sensor[:100],
         mac=str(_get(body, 'mac') or '').strip()[:32],
-        sender=str(_get(body, 'sender') or '').strip()[:100],
+        sender=sender[:100],
         client_ip=_client_ip(request),
         temp=_to_number(_get(body, 'temp'), float),
         humidity=_to_number(_get(body, 'humidity'), float),
@@ -102,8 +110,8 @@ def submit(request):
         tvoc=_to_number(_get(body, 'TVOC'), int),
         eco2=_to_number(_get(body, 'eCO2'), int),
         timestamp=_to_number(_get(body, 'timestamp'), int),
-        lat=_to_number(_get(body, 'lat'), float),
-        lon=_to_number(_get(body, 'lon'), float),
+        lat=lat,
+        lon=lon,
         raw=str(_get(body, 'raw') or '').strip()[:128],
     )
 
@@ -162,6 +170,7 @@ def _serialize(s):
         'timestamp': s.timestamp,
         'lat': s.lat,
         'lon': s.lon,
+        'sender': s.sender,
         'status': s.status,
         'detail': s.detail,
     }
@@ -218,7 +227,7 @@ class _Echo:
 @require_GET
 def export_csv(request):
     header = ['received_at', 'team', 'sensor', 'mac', 'temp', 'humidity', 'AQI', 'TVOC',
-              'eCO2', 'timestamp', 'lat', 'lon', 'status', 'detail']
+              'eCO2', 'timestamp', 'lat', 'lon', 'sender', 'status', 'detail']
     writer = csv.writer(_Echo())
 
     def rows():

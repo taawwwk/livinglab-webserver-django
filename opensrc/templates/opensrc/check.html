@@ -55,7 +55,7 @@
               <th class="px-3 py-2">수신 시간</th><th class="px-3 py-2">팀명</th><th class="px-3 py-2">센서</th>
               <th class="px-3 py-2">MAC 주소</th><th class="px-3 py-2">온도(℃)</th><th class="px-3 py-2">습도(%)</th>
               <th class="px-3 py-2">AQI</th><th class="px-3 py-2">TVOC</th><th class="px-3 py-2">eCO2</th>
-              <th class="px-3 py-2">측정 시각</th><th class="px-3 py-2">위도</th><th class="px-3 py-2">경도</th>
+              <th class="px-3 py-2">측정 시각</th><th class="px-3 py-2">위도</th><th class="px-3 py-2">경도</th><th class="px-3 py-2">전송자</th>
               <th class="px-3 py-2">검증</th>
             </tr>
           </thead>
@@ -148,7 +148,7 @@ async function loadRows() {
       cell(r.mac, 'font-mono text-xs text-pink-600'),
       cell(r.temp?.toFixed(2), 'bg-amber-50'), cell(r.humidity?.toFixed(2), 'bg-cyan-50'),
       cell(r.AQI), cell(r.TVOC), cell(r.eCO2), cell(fmtTs(r.timestamp)),
-      cell(r.lat), cell(r.lon), statusTd,
+      cell(r.lat), cell(r.lon), cell(r.sender, 'font-mono text-xs'), statusTd,
     );
     body.append(tr);
   }
