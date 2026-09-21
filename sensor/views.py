@@ -11,6 +11,7 @@ import time
 import logging
 import re
 import requests
+import shutil
 import subprocess
 import os
 import pytz
@@ -116,7 +117,8 @@ def receive_sensor_data(request):
             rssi=int(rssi) if rssi else None,
         )
 
-        logger.info(f"Sensor data saved: {sensor} - temp={temp}, co2={co2}")
+        # 센서 30여 대가 10초 주기로 올라와 INFO로 두면 로그가 이것만으로 가득 찬다
+        logger.debug(f"Sensor data saved: {sensor} - temp={temp}, co2={co2}")
 
         # 최신 상태 스냅샷 업데이트
         if mode == 'direct':
@@ -474,7 +476,7 @@ def fetch_pws_data():
             # 마지막 저장 데이터와 비교 - 새로운 데이터만 저장
             last = PWSLatest.objects.filter(stationID=station_id).first()
             if last and last.obsTimeUtc == obs_time:
-                logger.info(f"PWS {station_id}: Data unchanged (obsTimeUtc={obs_time}), skipping save")
+                logger.debug(f"PWS {station_id}: Data unchanged (obsTimeUtc={obs_time}), skipping save")
                 continue
 
             PWSObservation.objects.update_or_create(
@@ -524,12 +526,19 @@ def fetch_pws_data():
             logger.exception(f"PWS {station_id}: Error - {str(e)}")
 
 
+CCTV_ROOT = Path('/mnt/storage/cctv')
+
+# 세그먼트 파일명에 쓰는 시각 포맷. ffmpeg -strftime 이 직접 확장하므로
+# 파이썬 strptime 포맷과 동일한 문자열을 그대로 넘긴다.
+SEGMENT_TIME_FORMAT = '%Y-%m-%d_%H-%M-%S'
+
 CCTV_CONFIG = {
-    'precipRate_threshold': 0.1,
-    'segment_duration': 300,  # 5분 단위로 파일 분할
-    'resolution': '720x480',
-    'codec': 'h264',
-    'bitrate': '1500k',
+    'segment_duration': 300,      # 5분 단위로 파일 분할
+    'record_start_hour': 5,       # KST 05:00부터
+    'record_end_hour': 20,        # KST 20:00까지 (20:00 정각에 종료)
+    'stall_timeout': 900,         # 새 세그먼트가 15분간 안 나오면 스트림 행으로 보고 재시작
+    'min_free_gb': 100,           # 여유 공간이 이 밑이면 신규 녹화 중단 (DB가 같은 볼륨에 있음)
+    'min_segment_mb': 1,          # 이보다 작은 파일은 failed로 표시
 }
 
 CCTV_STATIONS = {
@@ -560,147 +569,259 @@ CCTV_STATIONS = {
 cctv_processes = {}
 
 
-def start_cctv_recording(cctv_station_id, precipRate):
-    """CCTV 녹화 시작"""
+def iter_cctv_configs():
+    """(pws_station_id, cctv_info) 쌍을 순회 (ICHEON28만 카메라 2대)"""
+    for station_id, config in CCTV_STATIONS.items():
+        entries = config if isinstance(config, list) else [config]
+        for entry in entries:
+            yield station_id, entry
+
+
+def within_recording_window(now=None):
+    """KST 기준 녹화 시간대(05:00~20:00) 안인지 판정"""
+    now = now or timezone.localtime()
+    return CCTV_CONFIG['record_start_hour'] <= now.hour < CCTV_CONFIG['record_end_hour']
+
+
+def _parse_segment_start(cctv_id, path):
+    """세그먼트 파일명에서 녹화 시작 시각(KST)을 파싱"""
+    stem = Path(path).stem
+    prefix = f"{cctv_id}_"
+    if not stem.startswith(prefix):
+        return None
     try:
-        cctv = CCTVStation.objects.get(cctvID=cctv_station_id)
+        return KST.localize(datetime.strptime(stem[len(prefix):], SEGMENT_TIME_FORMAT))
+    except ValueError:
+        return None
 
-        # 녹화 디렉토리 생성
-        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        output_dir = f"/mnt/storage/cctv/{cctv.pws_station}/{timestamp}"
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-        output_file = f"{output_dir}/{cctv.cctvID}.mp4"
+def _current_precip_rate(pws_station):
+    """해당 관측소의 최신 강수강도. 상시 녹화이므로 트리거가 아니라 사후 필터링용 메타데이터."""
+    latest = PWSLatest.objects.filter(stationID=pws_station).first()
+    if latest and latest.precipRate is not None:
+        return latest.precipRate
+    return 0.0
 
-        # ffmpeg 명령어 (원본 스트림 복사)
-        cmd = [
-            'ffmpeg',
-            '-i', cctv.url,
-            '-c:v', 'copy',
-            '-c:a', 'copy',
-            '-t', str(CCTV_CONFIG['segment_duration']),
-            '-y',
-            output_file,
-        ]
 
-        # ffmpeg 프로세스 시작
-        # stdout/stderr를 아무도 읽지 않으면 ffmpeg의 진행 로그가 파이프 버퍼를 채워
-        # write()가 블로킹되고 녹화가 통째로 멈춘다 (moov atom 누락의 원인) -> DEVNULL로 버림
-        process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        cctv_processes[cctv_station_id] = {
-            'process': process,
-            'file_path': output_file,
-            'output_dir': output_dir,
-        }
+def register_completed_segments(cctv, output_dir, include_last=False):
+    """
+    ffmpeg가 써 놓은 세그먼트 파일 중 완성된 것을 CCTVRecording에 등록한다.
+    ffmpeg가 아직 돌고 있으면 마지막 파일은 기록 중이므로 제외한다.
+    """
+    files = sorted(Path(output_dir).glob(f"{cctv.cctvID}_*.mp4"))
+    if not include_last:
+        files = files[:-1]
+    if not files:
+        return 0
 
-        # 녹화 기록 생성
+    paths = [str(f) for f in files]
+    known = set(
+        CCTVRecording.objects.filter(file_path__in=paths).values_list('file_path', flat=True)
+    )
+    precip = _current_precip_rate(cctv.pws_station)
+
+    created = 0
+    for path in paths:
+        if path in known:
+            continue
+
+        start = _parse_segment_start(cctv.cctvID, path)
+        if start is None:
+            logger.warning(f"CCTV {cctv.cctvID}: Unparsable segment filename, skipping - {path}")
+            continue
+
+        try:
+            size_mb = os.path.getsize(path) / (1024 * 1024)
+            # ffmpeg가 파일을 닫은 시각 = 세그먼트 종료 시각
+            end = datetime.fromtimestamp(os.path.getmtime(path), tz=KST)
+        except OSError as e:
+            logger.warning(f"CCTV {cctv.cctvID}: Cannot stat segment {path} - {e}")
+            continue
+
         CCTVRecording.objects.create(
             cctv_station=cctv,
-            file_path=output_file,
-            precipRate_trigger=precipRate,
-            status='recording',
+            start_time=start,
+            end_time=end,
+            file_path=path,
+            precipRate_trigger=precip,
+            status='completed' if size_mb >= CCTV_CONFIG['min_segment_mb'] else 'failed',
+            duration_minutes=max(int((end - start).total_seconds() / 60), 0),
+            file_size_mb=round(size_mb, 2),
         )
+        created += 1
 
-        logger.info(f"CCTV {cctv_station_id}: Recording started (precipRate={precipRate}mm/hr)")
+    return created
 
+
+def start_cctv_recording(cctv):
+    """
+    카메라 1대에 대해 장시간 ffmpeg 프로세스를 띄운다.
+    segment 먹서가 5분마다 파일을 끊어주므로 세그먼트마다 재접속하지 않아 영상이 끊기지 않는다.
+    """
+    output_dir = CCTV_ROOT / cctv.pws_station / timezone.localtime().strftime('%Y-%m-%d')
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_pattern = str(output_dir / f"{cctv.cctvID}_{SEGMENT_TIME_FORMAT}.mp4")
+
+    cmd = [
+        'ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'warning',
+        # 입력이 멎었을 때 영원히 매달리지 않도록 읽기 타임아웃 + 자동 재접속
+        '-rw_timeout', '15000000',
+        '-reconnect', '1',
+        '-reconnect_streamed', '1',
+        '-reconnect_on_network_error', '1',
+        '-reconnect_delay_max', '10',
+        '-i', cctv.url,
+        '-an', '-c:v', 'copy',
+        '-f', 'segment',
+        '-segment_time', str(CCTV_CONFIG['segment_duration']),
+        '-segment_atclocktime', '1',  # 정각 기준 5분 경계로 끊어 분석하기 쉽게
+        '-reset_timestamps', '1',
+        '-strftime', '1',
+        '-segment_format', 'mp4',
+        output_pattern,
+    ]
+
+    # 컨테이너 OS 시간대는 UTC다. Django가 프로세스 TZ를 바꿔주긴 하지만 그 암묵적 동작에
+    # 파일명을 의존시키지 않도록 자식 프로세스에 KST를 명시한다.
+    env = {**os.environ, 'TZ': 'Asia/Seoul'}
+
+    # stdout/stderr를 아무도 읽지 않으면 ffmpeg의 진행 로그가 파이프 버퍼를 채워
+    # write()가 블로킹되고 녹화가 통째로 멈춘다 -> DEVNULL로 버림
+    process = subprocess.Popen(
+        cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env
+    )
+
+    now = time.monotonic()
+    cctv_processes[cctv.cctvID] = {
+        'process': process,
+        'output_dir': output_dir,
+        'segment_count': 0,
+        'last_progress_at': now,
+    }
+
+    logger.info(f"CCTV {cctv.cctvID}: Recording started (pid={process.pid}, dir={output_dir})")
+
+
+def stop_cctv_recording(cctv_station_id, reason='window_closed'):
+    """ffmpeg를 종료하고 남은 세그먼트를 등록한다."""
+    state = cctv_processes.pop(cctv_station_id, None)
+    if state is None:
+        return
+
+    process = state['process']
+    try:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                logger.warning(f"CCTV {cctv_station_id}: SIGTERM timed out, sending SIGKILL")
+                process.kill()
+                process.wait()  # kill 뒤에도 reap 해야 좀비가 남지 않는다
+        else:
+            process.wait()
+    except Exception as e:
+        logger.exception(f"CCTV {cctv_station_id}: Error terminating ffmpeg - {e}")
+
+    registered = 0
+    try:
+        cctv = CCTVStation.objects.get(cctvID=cctv_station_id)
+        registered = register_completed_segments(cctv, state['output_dir'], include_last=True)
     except CCTVStation.DoesNotExist:
-        logger.error(f"CCTV {cctv_station_id}: Station not found")
+        logger.error(f"CCTV {cctv_station_id}: Station not found while stopping")
     except Exception as e:
-        logger.exception(f"CCTV {cctv_station_id}: Error starting recording - {str(e)}")
+        logger.exception(f"CCTV {cctv_station_id}: Error registering segments on stop - {e}")
+
+    logger.info(
+        f"CCTV {cctv_station_id}: Recording stopped "
+        f"(reason={reason}, {registered} new segment(s) registered)"
+    )
 
 
-def stop_cctv_recording(cctv_station_id, status='completed'):
-    """CCTV 녹화 종료"""
+def cleanup_orphan_recordings():
+    """
+    프로세스가 죽으면서 'recording'인 채 남은 과거 레코드를 정리한다.
+    현재 방식은 세그먼트가 완성된 뒤에만 행을 만들므로 'recording' 상태는 더 이상 생기지 않는다.
+    """
+    orphans = CCTVRecording.objects.filter(status='recording')
+    count = orphans.update(status='failed')
+    if count:
+        logger.warning(f"CCTV: Marked {count} orphaned 'recording' row(s) as failed")
+    return count
+
+
+def monitor_cctv_recording():
+    """
+    KST 05:00~20:00 동안 CCTV 4대를 상시 녹화한다 (5분 세그먼트).
+    매분 호출되어 프로세스 생존/진행 상태를 확인하고 완성된 세그먼트를 DB에 등록한다.
+    """
     try:
-        if cctv_station_id not in cctv_processes:
-            return
+        in_window = within_recording_window()
 
-        process_info = cctv_processes[cctv_station_id]
-        process = process_info['process']
+        free_gb = shutil.disk_usage(CCTV_ROOT).free / (1024 ** 3)
+        space_ok = free_gb >= CCTV_CONFIG['min_free_gb']
+        if not space_ok:
+            # DB도 같은 볼륨에 있으므로 디스크를 채우면 수집 전체가 죽는다
+            logger.error(
+                f"CCTV: Free space {free_gb:.1f}GB below {CCTV_CONFIG['min_free_gb']}GB floor "
+                f"- recording halted"
+            )
 
-        # ffmpeg 프로세스 종료
-        process.terminate()
-        try:
-            process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            process.kill()
+        for pws_station, info in iter_cctv_configs():
+            cctv_id = info['cctvID']
+            try:
+                cctv, _ = CCTVStation.objects.get_or_create(
+                    cctvID=cctv_id,
+                    defaults={
+                        'pws_station': pws_station,
+                        'url': info['url'],
+                        'location_name': info['location'],
+                    },
+                )
 
-        # 파일 크기 계산
-        file_path = process_info['file_path']
-        file_size_mb = 0
-        if os.path.exists(file_path):
-            file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-
-        # 녹화 기록 업데이트
-        recording = CCTVRecording.objects.filter(
-            file_path=file_path,
-            status='recording'
-        ).first()
-
-        if recording:
-            recording.end_time = timezone.now()
-            recording.status = status
-            if recording.start_time:
-                duration = (recording.end_time - recording.start_time).total_seconds() / 60
-                recording.duration_minutes = int(duration)
-            recording.file_size_mb = file_size_mb
-            recording.save()
-
-        del cctv_processes[cctv_station_id]
-
-        logger.info(f"CCTV {cctv_station_id}: Recording stopped ({file_size_mb:.2f}MB, status={status})")
-
-    except Exception as e:
-        logger.exception(f"CCTV {cctv_station_id}: Error stopping recording - {str(e)}")
-
-
-def monitor_preciprate_and_cctv():
-    """강수량 모니터링 및 CCTV 자동 제어 (5분 단위 세그먼트 녹화)"""
-    try:
-        # 자연 종료된 세그먼트(ffmpeg -t 만료) 정리
-        for cctv_id in list(cctv_processes.keys()):
-            process = cctv_processes[cctv_id]['process']
-            if process.poll() is not None:
-                stop_cctv_recording(cctv_id, status='completed')
-
-        # PWS 최신 데이터 조회
-        pws_stations = PWSLatest.objects.all()
-
-        for pws in pws_stations:
-            precipRate = pws.precipRate or 0
-            threshold = CCTV_CONFIG['precipRate_threshold']
-
-            # CCTV 설정 찾기
-            cctv_config = CCTV_STATIONS.get(pws.stationID)
-            if not cctv_config:
-                continue
-
-            # ICHEON28은 리스트, 나머지는 딕셔너리
-            if isinstance(cctv_config, list):
-                cctv_list = cctv_config
-            else:
-                cctv_list = [cctv_config]
-
-            for cctv_info in cctv_list:
-                cctv_id = cctv_info['cctvID']
-
-                # 강수량 초과: 녹화 시작
-                if precipRate > threshold:
-                    if cctv_id not in cctv_processes:
-                        # 스테이션 정보 저장 (없으면 생성)
-                        CCTVStation.objects.get_or_create(
-                            cctvID=cctv_id,
-                            defaults={
-                                'pws_station': pws.stationID,
-                                'url': cctv_info['url'],
-                                'location_name': cctv_info['location'],
-                            }
+                if not (in_window and space_ok):
+                    if cctv_id in cctv_processes:
+                        stop_cctv_recording(
+                            cctv_id,
+                            reason='window_closed' if not in_window else 'low_disk_space',
                         )
-                        start_cctv_recording(cctv_id, precipRate)
+                    continue
 
-                # 강수량 정상: 녹화 중이면 종료
-                elif cctv_id in cctv_processes:
-                    stop_cctv_recording(cctv_id, status='completed')
+                state = cctv_processes.get(cctv_id)
+
+                if state is None:
+                    start_cctv_recording(cctv)
+                    continue
+
+                process = state['process']
+                if process.poll() is not None:
+                    logger.warning(
+                        f"CCTV {cctv_id}: ffmpeg exited unexpectedly "
+                        f"(code={process.returncode}), restarting"
+                    )
+                    stop_cctv_recording(cctv_id, reason='process_exited')
+                    start_cctv_recording(cctv)
+                    continue
+
+                # 진행 감시: 프로세스는 살아있는데 새 세그먼트가 안 나오면 스트림이 물린 것
+                segment_count = len(list(Path(state['output_dir']).glob(f"{cctv_id}_*.mp4")))
+                if segment_count > state['segment_count']:
+                    state['segment_count'] = segment_count
+                    state['last_progress_at'] = time.monotonic()
+                elif time.monotonic() - state['last_progress_at'] > CCTV_CONFIG['stall_timeout']:
+                    logger.error(
+                        f"CCTV {cctv_id}: No new segment for "
+                        f"{CCTV_CONFIG['stall_timeout']}s - stream stalled, forcing restart"
+                    )
+                    stop_cctv_recording(cctv_id, reason='stalled')
+                    start_cctv_recording(cctv)
+                    continue
+
+                register_completed_segments(cctv, state['output_dir'])
+
+            except Exception as e:
+                # 카메라 1대의 실패가 나머지 3대를 막지 않도록 개별 격리
+                logger.exception(f"CCTV {cctv_id}: Monitor iteration failed - {e}")
 
     except Exception as e:
         logger.exception(f"CCTV monitoring error: {str(e)}")

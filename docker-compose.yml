@@ -4,6 +4,7 @@ services:
   db:
     image: postgres:16-alpine
     container_name: livinglab_db
+    restart: unless-stopped
     environment:
       POSTGRES_DB: livinglab_sensor
       POSTGRES_USER: postgres
@@ -25,6 +26,7 @@ services:
   web:
     build: .
     container_name: livinglab_web
+    restart: unless-stopped
     command: sh -c "python manage.py migrate && gunicorn --bind 0.0.0.0:10021 --workers 4 --access-logfile - --error-logfile - livinglab.wsgi:application"
     environment:
       DEBUG: "False"
@@ -35,7 +37,7 @@ services:
       DB_HOST: db
       DB_PORT: 5432
     ports:
-      - "10021:10021"
+      - "127.0.0.1:8081:10021"
     depends_on:
       db:
         condition: service_healthy
@@ -54,8 +56,11 @@ services:
   scheduler:
     build: .
     container_name: livinglab_scheduler
+    restart: unless-stopped
     command: python manage.py runscheduler
     environment:
+      # CCTV 녹화 on/off 스위치. PWS 기상 수집은 이 값과 무관하게 계속 돈다.
+      CCTV_RECORDING_ENABLED: "false"
       DEBUG: "False"
       DJANGO_SECRET_KEY: "your-secret-key-change-in-production"
       DB_NAME: livinglab_sensor
