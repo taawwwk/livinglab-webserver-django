@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 
 class SensorData(models.Model):
@@ -209,7 +210,9 @@ class CCTVRecording(models.Model):
     ]
 
     cctv_station = models.ForeignKey(CCTVStation, on_delete=models.CASCADE)
-    start_time = models.DateTimeField(auto_now_add=True)
+    # 세그먼트 파일명(ffmpeg -strftime)에서 파싱한 실제 녹화 시작 시각을 넣어야 하므로
+    # auto_now_add(=행 생성 시각 고정)를 쓸 수 없다. 세그먼트는 완료된 뒤에 등록된다.
+    start_time = models.DateTimeField(default=timezone.now)
     end_time = models.DateTimeField(null=True, blank=True)
     file_path = models.CharField(max_length=500, blank=True)
     precipRate_trigger = models.FloatField()
