@@ -27,8 +27,13 @@ COMPARED_FIELDS = [
 ]
 
 
+# 학생들이 응답을 String으로 받아 Logcat에 찍으므로 한글을 \uXXXX로 이스케이프하지 않는다
+_JSON_PARAMS = {'ensure_ascii': False}
+
+
 def _fail(message, http_status=400, **extra):
-    return JsonResponse({'result': 'Fail', 'message': message, **extra}, status=http_status)
+    return JsonResponse({'result': 'Fail', 'message': message, **extra}, status=http_status,
+                        json_dumps_params=_JSON_PARAMS)
 
 
 def _load_body(request):
@@ -133,7 +138,7 @@ def submit(request):
             'message': f'Data received from {team} successfully!',
             'received_data': {'team': team, 'sensor': sensor},
             'verified': True,
-        })
+        }, json_dumps_params=_JSON_PARAMS)
 
     logger.info(f'opensrc rejected: team={team} status={sub.status} detail={sub.detail}')
     extra = {'received_data': {'team': team, 'sensor': sensor}, 'verified': False, 'status': sub.status}
