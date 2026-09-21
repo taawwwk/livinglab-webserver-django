@@ -50,3 +50,6 @@ Thumbs.db
 # Database
 /mnt/storage/
 /mnt/backup/
+
+# Secrets (docker compose가 자동으로 읽음)
+.env

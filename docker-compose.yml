@@ -36,6 +36,9 @@ services:
       DB_PASSWORD: postgres
       DB_HOST: db
       DB_PORT: 5432
+      # 값은 이 디렉터리의 .env에 둔다 (git 미추적)
+      OPENSRC_HMAC_KEY: ${OPENSRC_HMAC_KEY:?OPENSRC_HMAC_KEY must be set in .env}
+      OPENSRC_TAG_LEN: ${OPENSRC_TAG_LEN:-8}
     ports:
       - "127.0.0.1:8081:10021"
     depends_on:

@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>실습 데이터 수신 현황</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html, body { font-family: 'Noto Sans KR', system-ui,-apple-system,'Segoe UI',Roboto,'Apple SD Gothic Neo','Malgun Gothic'; }
+    td, th { white-space: nowrap; }
+  </style>
+</head>
+<body class="min-h-screen bg-[#f5f7f1] text-neutral-800">
+  <header class="sticky top-0 z-30 backdrop-blur bg-white/70 border-b border-neutral-200/60">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-16 flex items-center gap-3">
+      <div class="h-8 w-8 rounded-xl bg-gradient-to-br from-sky-400 to-blue-600 shadow-sm"></div>
+      <span class="font-semibold tracking-tight">실습 데이터 수신 현황 (Living Lab)</span>
+      <span class="ml-auto rounded-full bg-blue-600 text-white text-xs px-3 py-1">5초마다 자동 업데이트</span>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <section>
+      <h2 class="text-lg font-bold tracking-tight mb-3">팀별 수집 현황</h2>
+      <div id="summary" class="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"></div>
+      <p id="summary-empty" class="text-sm text-neutral-500 hidden">아직 수신된 데이터가 없습니다.</p>
+    </section>
+
+    <section>
+      <div class="flex flex-wrap items-end gap-3 mb-3">
+        <h2 class="text-lg font-bold tracking-tight mr-auto">최근 수신 데이터</h2>
+        <label class="text-sm">팀
+          <select id="f-team" class="ml-1 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-sm">
+            <option value="">전체</option>
+          </select>
+        </label>
+        <label class="text-sm">상태
+          <select id="f-status" class="ml-1 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-sm">
+            <option value="">전체</option>
+            <option value="verified">검증 성공</option>
+            <option value="value_mismatch">값 불일치</option>
+            <option value="bad_tag">태그 불일치</option>
+            <option value="bad_raw">raw 형식 오류</option>
+            <option value="no_raw">raw 없음</option>
+          </select>
+        </label>
+        <a id="csv" href="{% url 'opensrc_export' %}" class="rounded-lg bg-neutral-800 text-white text-sm px-3 py-1.5 hover:bg-neutral-700">CSV 다운로드</a>
+      </div>
+
+      <div class="overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
+        <table class="min-w-full text-sm text-center">
+          <thead class="bg-neutral-800 text-white">
+            <tr>
+              <th class="px-3 py-2">수신 시간</th><th class="px-3 py-2">팀명</th><th class="px-3 py-2">센서</th>
+              <th class="px-3 py-2">MAC 주소</th><th class="px-3 py-2">온도(℃)</th><th class="px-3 py-2">습도(%)</th>
+              <th class="px-3 py-2">AQI</th><th class="px-3 py-2">TVOC</th><th class="px-3 py-2">eCO2</th>
+              <th class="px-3 py-2">측정 시각</th><th class="px-3 py-2">위도</th><th class="px-3 py-2">경도</th>
+              <th class="px-3 py-2">검증</th>
+            </tr>
+          </thead>
+          <tbody id="rows" class="divide-y divide-neutral-100"></tbody>
+        </table>
+      </div>
+      <p id="updated" class="mt-2 text-xs text-neutral-500"></p>
+    </section>
+  </main>
+
+<script>
+const URLS = {
+  summary: "{% url 'opensrc_summary' %}",
+  latest: "{% url 'opensrc_latest' %}",
+  csv: "{% url 'opensrc_export' %}",
+};
+const STATUS = {
+  verified:       ['검증 성공', 'bg-emerald-100 text-emerald-700'],
+  value_mismatch: ['값 불일치', 'bg-amber-100 text-amber-800'],
+  bad_tag:        ['태그 불일치', 'bg-rose-100 text-rose-700'],
+  bad_raw:        ['raw 형식 오류', 'bg-rose-100 text-rose-700'],
+  no_raw:         ['raw 없음', 'bg-neutral-200 text-neutral-700'],
+};
+const $ = (id) => document.getElementById(id);
+
+function cell(text, cls = '') {
+  const td = document.createElement('td');
+  td.className = 'px-3 py-2 ' + cls;
+  td.textContent = text ?? '-';
+  return td;
+}
+
+function fmtTs(ts) {
+  if (ts == null) return '-';
+  const d = new Date(ts * 1000);
+  return isNaN(d) ? String(ts) : d.toLocaleString('ko-KR', { hour12: false });
+}
+
+function query() {
+  const p = new URLSearchParams();
+  if ($('f-team').value) p.set('team', $('f-team').value);
+  if ($('f-status').value) p.set('status', $('f-status').value);
+  return p.toString();
+}
+
+async function loadSummary() {
+  const { teams } = await (await fetch(URLS.summary)).json();
+  const box = $('summary');
+  box.replaceChildren();
+  $('summary-empty').classList.toggle('hidden', teams.length > 0);
+
+  const sel = $('f-team');
+  const current = sel.value;
+  sel.replaceChildren(new Option('전체', ''));
+  for (const t of teams) {
+    sel.add(new Option(t.team, t.team));
+
+    const card = document.createElement('div');
+    card.className = 'rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5';
+    const name = document.createElement('div');
+    name.className = 'font-semibold truncate';
+    name.textContent = t.team;
+    const nums = document.createElement('div');
+    nums.className = 'mt-1 text-2xl font-extrabold text-emerald-600';
+    nums.textContent = t.verified.toLocaleString();
+    const sub = document.createElement('div');
+    sub.className = 'text-xs text-neutral-500';
+    sub.textContent = `검증 ${t.verified} / 전체 ${t.total} · 최근 ${t.last.slice(5)}`;
+    card.append(name, nums, sub);
+    box.append(card);
+  }
+  sel.value = current;
+}
+
+async function loadRows() {
+  const { rows } = await (await fetch(URLS.latest + '?' + query())).json();
+  const body = $('rows');
+  body.replaceChildren();
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    const [label, cls] = STATUS[r.status] || [r.status, 'bg-neutral-200'];
+    const badge = document.createElement('span');
+    badge.className = 'rounded-full px-2 py-0.5 text-xs font-semibold ' + cls;
+    badge.textContent = label;
+    if (r.detail) badge.title = r.detail;
+    const statusTd = cell('');
+    statusTd.append(badge);
+    tr.append(
+      cell(r.received_at.slice(11)), cell(r.team, 'font-semibold'), cell(r.sensor),
+      cell(r.mac, 'font-mono text-xs text-pink-600'),
+      cell(r.temp?.toFixed(2), 'bg-amber-50'), cell(r.humidity?.toFixed(2), 'bg-cyan-50'),
+      cell(r.AQI), cell(r.TVOC), cell(r.eCO2), cell(fmtTs(r.timestamp)),
+      cell(r.lat), cell(r.lon), statusTd,
+    );
+    body.append(tr);
+  }
+  $('csv').href = URLS.csv + '?' + query();
+  $('updated').textContent = '마지막 갱신: ' + new Date().toLocaleTimeString('ko-KR', { hour12: false });
+}
+
+async function refresh() {
+  try { await Promise.all([loadSummary(), loadRows()]); }
+  catch (e) { $('updated').textContent = '갱신 실패: ' + e; }
+}
+
+$('f-team').addEventListener('change', loadRows);
+$('f-status').addEventListener('change', loadRows);
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

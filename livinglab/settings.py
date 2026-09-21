@@ -18,6 +18,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'sensor',
+    'opensrc',
 ]
 
 MIDDLEWARE = [
@@ -118,6 +119,11 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
+        'opensrc': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
         'apscheduler': {
             'handlers': ['console'],
             'level': 'WARNING',
@@ -125,3 +131,12 @@ LOGGING = {
         },
     },
 }
+
+
+# 오픈소스개발프로젝트 실습 API (sensor/opensrc/)
+# 학생 요청 body의 "key"와 일치해야 한다 (강의자료에 공개된 값)
+OPENSRC_API_KEY = os.getenv('OPENSRC_API_KEY', 'opensrc2026')
+# 라즈베리파이와 공유하는 HMAC 비밀키. 절대 학생에게 공개하지 않는다.
+OPENSRC_HMAC_KEY = os.getenv('OPENSRC_HMAC_KEY', '').encode()
+# BLE 패킷 끝에 붙는 태그 길이(바이트). 광고 패킷 31바이트를 넘으면 4로 줄인다.
+OPENSRC_TAG_LEN = int(os.getenv('OPENSRC_TAG_LEN', '8'))
