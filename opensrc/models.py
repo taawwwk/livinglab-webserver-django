@@ -51,3 +51,45 @@ class Submission(models.Model):
 
     def __str__(self):
         return f'{self.team} / {self.sensor} ({self.status})'
+
+
+class TeamSubmission(models.Model):
+    """5주차 실습: 팀이 직접 만든 센서의 데이터.
+
+    센서가 팀 소유라 HMAC 키를 넣어봐야 학생이 키를 갖게 되므로 검증하지 않는다.
+    대신 팀별 key로 팀을 식별하고, 물리적으로 불가능한 값만 표시해 둔다.
+    """
+
+    STATUS_OK = 'ok'
+    STATUS_OUT_OF_RANGE = 'out_of_range'
+    STATUS_CHOICES = [
+        (STATUS_OK, '정상'),
+        (STATUS_OUT_OF_RANGE, '범위 이상'),
+    ]
+
+    received_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    team = models.CharField(max_length=20, db_index=True)
+    sensor = models.CharField(max_length=100)
+    mac = models.CharField(max_length=32)
+    sender = models.CharField(max_length=100)
+    client_ip = models.GenericIPAddressField(null=True, blank=True)
+
+    temp = models.FloatField()
+    humidity = models.FloatField()
+    aqi = models.IntegerField()
+    tvoc = models.IntegerField()
+    eco2 = models.IntegerField()
+    timestamp = models.BigIntegerField()
+    lat = models.FloatField()
+    lon = models.FloatField()
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, db_index=True)
+    detail = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        db_table = 'opensrc_team_submission'
+        ordering = ['-received_at']
+        indexes = [models.Index(fields=['team', 'received_at'])]
+
+    def __str__(self):
+        return f'{self.team} / {self.sensor} ({self.status})'

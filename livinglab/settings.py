@@ -140,3 +140,5 @@ OPENSRC_API_KEY = os.getenv('OPENSRC_API_KEY', 'opensrc2026')
 OPENSRC_HMAC_KEY = os.getenv('OPENSRC_HMAC_KEY', '').encode()
 # BLE 패킷 끝에 붙는 태그 길이(바이트). 광고 패킷 31바이트를 넘으면 4로 줄인다.
 OPENSRC_TAG_LEN = int(os.getenv('OPENSRC_TAG_LEN', '8'))
+# 5주차 실습: 팀 수. 팀명은 'Team 1'..'Team N', key는 'opensrc-team 1'..'opensrc-team N'
+OPENSRC_TEAM_COUNT = int(os.getenv('OPENSRC_TEAM_COUNT', '9'))
