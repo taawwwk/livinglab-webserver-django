@@ -1,4 +1,8 @@
-"""5주차 실습: 팀이 직접 만든 센서 데이터 업로드 API와 조회 화면."""
+"""5주차 실습: 팀이 직접 만든 센서 데이터 업로드 API와 조회 화면.
+
+6주차 데이터 분석 실습에서는 아래 data() 뷰로 자기 팀 데이터를 내려받는다.
+"""
+import datetime
 import logging
 import re
 import time
@@ -194,3 +198,87 @@ def export_csv(request):
               'eCO2', 'timestamp', 'lat', 'lon', 'sender', 'status', 'detail']
     filename = f"opensrc_teams_{request.GET.get('team') or 'all'}.csv".replace(' ', '_')
     return csv_response(header, _filtered(request).order_by('received_at'), _serialize, filename)
+
+
+# ---------------------------------------------------------------------------
+# 6주차 데이터 분석 실습용 조회 API
+# ---------------------------------------------------------------------------
+
+# values()로 가져올 DB 컬럼. 수만 행을 다루므로 필요한 것만 꺼낸다.
+DATA_COLUMNS = ['received_at', 'team', 'sensor', 'mac', 'temp', 'humidity', 'aqi', 'tvoc',
+                'eco2', 'timestamp', 'lat', 'lon', 'sender', 'status']
+DATA_HEADER = ['received_at', 'team', 'sensor', 'mac', 'temp', 'humidity', 'AQI', 'TVOC',
+               'eCO2', 'timestamp', 'lat', 'lon', 'sender', 'status']
+DATE_FORMATS = ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d']
+
+
+def _data_row(v):
+    """values() 딕셔너리 → 응답 한 행. 업로드된 원본값을 그대로 내보낸다."""
+    return {
+        'received_at': timezone.localtime(v['received_at']).strftime('%Y-%m-%d %H:%M:%S'),
+        'team': v['team'],
+        'sensor': v['sensor'],
+        'mac': v['mac'],
+        'temp': v['temp'],
+        'humidity': v['humidity'],
+        'AQI': v['aqi'],
+        'TVOC': v['tvoc'],
+        'eCO2': v['eco2'],
+        'timestamp': v['timestamp'],
+        'lat': v['lat'],
+        'lon': v['lon'],
+        'sender': v['sender'],
+        'status': v['status'],
+    }
+
+
+def _parse_bound(value, is_end):
+    """KST 문자열 → aware datetime. 날짜만 주면 end는 그날 끝까지 포함한다."""
+    text = str(value).strip()
+    for fmt in DATE_FORMATS:
+        try:
+            parsed = datetime.datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+        if is_end and fmt == '%Y-%m-%d':
+            parsed += datetime.timedelta(days=1)  # 그날 23:59:59까지 포함
+        return timezone.make_aware(parsed, timezone.get_current_timezone())
+    return None
+
+
+@require_GET
+def data(request):
+    """팀 키로 자기 팀 데이터를 조회한다 (6주차 pandas 실습용)."""
+    team = team_for_key(request.GET.get('key'))
+    if team is None:
+        return fail('key가 올바르지 않습니다 (팀별로 발급된 key를 사용하세요)')
+
+    qs = TeamSubmission.objects.all()
+    scope = request.GET.get('team')
+    if not scope:
+        qs = qs.filter(team=team)
+    elif _normalize(scope) == 'all':
+        team = 'all'  # 7주차 팀 간 비교용
+    elif _normalize(scope) == _normalize(team):
+        qs = qs.filter(team=team)
+    else:
+        return fail(f'team은 생략하거나 "all" 또는 "{team}"이어야 합니다')
+
+    for param, is_end in (('start', False), ('end', True)):
+        value = request.GET.get(param)
+        if not value:
+            continue
+        bound = _parse_bound(value, is_end)
+        if bound is None:
+            return fail(f'{param} 형식이 올바르지 않습니다: "{value}" '
+                        '(예: 2026-10-01 또는 "2026-10-01 13:00")')
+        qs = qs.filter(**{f'received_at__{"lt" if is_end else "gte"}': bound})
+
+    qs = qs.order_by('received_at').values(*DATA_COLUMNS)
+
+    if (request.GET.get('format') or 'json').lower() == 'csv':
+        filename = f'opensrc_{team}.csv'.replace(' ', '_')
+        return csv_response(DATA_HEADER, qs, _data_row, filename)
+
+    rows = [_data_row(v) for v in qs.iterator(chunk_size=2000)]
+    return ok({'team': team, 'count': len(rows), 'data': rows})

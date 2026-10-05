@@ -16,4 +16,7 @@ urlpatterns = [
     re_path(r'^api/teams/latest/?$', team_views.latest, name='opensrc_teams_latest'),
     re_path(r'^api/teams/summary/?$', team_views.summary, name='opensrc_teams_summary'),
     re_path(r'^teams_export\.csv$', team_views.export_csv, name='opensrc_teams_export'),
+
+    # 6주차: 데이터 분석 실습용 조회
+    re_path(r'^data/?$', team_views.data, name='opensrc_team_data'),
 ]

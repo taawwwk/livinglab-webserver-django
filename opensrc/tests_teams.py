@@ -1,6 +1,8 @@
+import datetime
 import json
 
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from .models import TeamSubmission
 
@@ -100,3 +102,89 @@ class TeamUploadTests(TestCase):
         r = self.post(body(), url='/sensor/opensrc/test/')
         self.assertEqual(r.status_code, 400)
         self.assertIn('key', r.json()['message'])
+
+
+@override_settings(OPENSRC_TEAM_COUNT=9)
+class TeamDataApiTests(TestCase):
+    url = '/sensor/opensrc/data/'
+
+    def make(self, team, received_at, **overrides):
+        values = dict(VALUES, **overrides)
+        s = TeamSubmission.objects.create(
+            team=team, sensor=values['sensor'], mac=values['mac'], sender=values['sender'],
+            temp=values['temp'], humidity=values['humidity'], aqi=values['AQI'],
+            tvoc=values['TVOC'], eco2=values['eCO2'], timestamp=values['timestamp'],
+            lat=values['lat'], lon=values['lon'], status=TeamSubmission.STATUS_OK,
+        )
+        # received_at은 auto_now_add라 생성 후에 덮어쓴다
+        aware = timezone.make_aware(datetime.datetime.strptime(received_at, '%Y-%m-%d %H:%M:%S'),
+                                    timezone.get_current_timezone())
+        TeamSubmission.objects.filter(pk=s.pk).update(received_at=aware)
+        return s
+
+    def setUp(self):
+        self.make('Team 1', '2026-10-01 09:00:00', temp=20.0)
+        self.make('Team 1', '2026-10-02 23:30:00', temp=21.0)
+        self.make('Team 1', '2026-10-03 08:00:00', temp=22.0)
+        self.make('Team 2', '2026-10-02 10:00:00', temp=30.0)
+
+    def test_own_team_only_sorted_ascending(self):
+        r = self.client.get(self.url, {'key': 'opensrc-team 1'})
+        self.assertEqual(r.status_code, 200)
+        payload = r.json()
+        self.assertEqual((payload['team'], payload['count']), ('Team 1', 3))
+        self.assertEqual([row['temp'] for row in payload['data']], [20.0, 21.0, 22.0])
+        self.assertEqual([row['received_at'] for row in payload['data']],
+                         ['2026-10-01 09:00:00', '2026-10-02 23:30:00', '2026-10-03 08:00:00'])
+        self.assertEqual(set(payload['data'][0]), {
+            'team', 'sensor', 'mac', 'temp', 'humidity', 'AQI', 'TVOC', 'eCO2',
+            'timestamp', 'lat', 'lon', 'sender', 'received_at', 'status'})
+
+    def test_date_range_filters(self):
+        def temps(**params):
+            params['key'] = 'opensrc-team 1'
+            return [row['temp'] for row in self.client.get(self.url, params).json()['data']]
+
+        # 날짜만 주면 end 당일까지 포함한다
+        self.assertEqual(temps(start='2026-10-02', end='2026-10-02'), [21.0])
+        self.assertEqual(temps(start='2026-10-02'), [21.0, 22.0])
+        self.assertEqual(temps(end='2026-10-01'), [20.0])
+        self.assertEqual(temps(start='2026-10-02 23:00', end='2026-10-03 07:00'), [21.0])
+        self.assertEqual(temps(start='2026-10-05'), [])
+
+    def test_team_all(self):
+        payload = self.client.get(self.url, {'key': 'opensrc-team 1', 'team': 'all'}).json()
+        self.assertEqual((payload['team'], payload['count']), ('all', 4))
+        self.assertEqual(sorted({row['team'] for row in payload['data']}), ['Team 1', 'Team 2'])
+        # 다른 팀을 콕 집어 요청하는 것은 막는다
+        r = self.client.get(self.url, {'key': 'opensrc-team 1', 'team': 'Team 2'})
+        self.assertEqual(r.status_code, 400)
+
+    def test_bad_key(self):
+        for params in ({}, {'key': ''}, {'key': 'opensrc2026'}, {'key': 'opensrc-team 99'}):
+            r = self.client.get(self.url, params)
+            self.assertEqual(r.status_code, 400, params)
+            self.assertEqual(r.json()['result'], 'Fail')
+            self.assertIn('key', r.json()['message'])
+
+    def test_bad_date_format(self):
+        for param in ('start', 'end'):
+            r = self.client.get(self.url, {'key': 'opensrc-team 1', param: '2026/10/01'})
+            self.assertEqual(r.status_code, 400)
+            self.assertIn(param, r.json()['message'])
+            self.assertIn('2026/10/01', r.json()['message'])
+
+    def test_csv_format(self):
+        r = self.client.get(self.url, {'key': 'opensrc-team 1', 'format': 'csv'})
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r['Content-Type'].startswith('text/csv'))
+        self.assertIn('attachment', r['Content-Disposition'])
+        lines = b''.join(r.streaming_content).decode('utf-8-sig').strip().splitlines()
+        self.assertEqual(lines[0], 'received_at,team,sensor,mac,temp,humidity,AQI,TVOC,'
+                                   'eCO2,timestamp,lat,lon,sender,status')
+        self.assertEqual(len(lines), 4)  # 헤더 + Team 1 데이터 3건
+        self.assertTrue(lines[1].startswith('2026-10-01 09:00:00,Team 1,'))
+
+    def test_no_trailing_slash(self):
+        r = self.client.get('/sensor/opensrc/data', {'key': 'opensrc-team 2'})
+        self.assertEqual(r.json()['count'], 1)
