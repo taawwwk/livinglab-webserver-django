@@ -15,6 +15,8 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
+from sensor.models import SensorData, SensorLocation
+
 from .common import client_ip, csv_response, fail, get, load_body, ok, to_number
 from .models import TeamSubmission
 
@@ -253,6 +255,12 @@ def data(request):
     if team is None:
         return fail('key가 올바르지 않습니다 (팀별로 발급된 key를 사용하세요)')
 
+    source = _normalize(request.GET.get('source'))
+    if source == 'lab':
+        return _lab_data(request)
+    if source not in ('', 'team'):
+        return fail('source는 생략하거나 "lab"이어야 합니다')
+
     qs = TeamSubmission.objects.all()
     scope = request.GET.get('team')
     if not scope:
@@ -282,3 +290,71 @@ def data(request):
 
     rows = [_data_row(v) for v in qs.iterator(chunk_size=2000)]
     return ok({'team': team, 'count': len(rows), 'data': rows})
+
+
+# ---------------------------------------------------------------------------
+# source=lab: 연구실(리빙랩) 센서 1대의 원본 데이터
+# ---------------------------------------------------------------------------
+# sensor_sensor_data에는 서버 수신 시각 컬럼이 없고 센서가 보낸 sensing_time만 있다.
+# 그래서 received_at도 sensing_time을 KST로 바꾼 값이며, 기간 필터·정렬도 sensing_time 기준이다.
+# 습도·AQI·TVOC는 연구실 센서가 측정하지 않아 내보내지 않는다.
+LAB_COLUMNS = ['sensor', 'mac', 'receiver', 'temperature', 'co2', 'sensing_time']
+LAB_HEADER = ['received_at', 'sensor', 'mac', 'temp', 'co2', 'timestamp', 'lat', 'lon', 'sender']
+# 10초 간격이라 하루 8,640행. 기간이 길면 JSON을 메모리에 다 올리게 되므로 상한을 둔다.
+LAB_DEFAULT_DAYS = 14
+LAB_MAX_DAYS = 31
+
+
+def _lab_row(v, lat, lon):
+    return {
+        'received_at': timezone.localtime(
+            datetime.datetime.fromtimestamp(v['sensing_time'], tz=datetime.timezone.utc)
+        ).strftime('%Y-%m-%d %H:%M:%S'),
+        'sensor': v['sensor'],
+        'mac': v['mac'],
+        'temp': v['temperature'],
+        'co2': v['co2'],
+        'timestamp': v['sensing_time'],
+        'lat': lat,
+        'lon': lon,
+        'sender': v['receiver'],
+    }
+
+
+def _lab_data(request):
+    bounds = {}
+    for param, is_end in (('start', False), ('end', True)):
+        value = request.GET.get(param)
+        if not value:
+            continue
+        bounds[param] = _parse_bound(value, is_end)
+        if bounds[param] is None:
+            return fail(f'{param} 형식이 올바르지 않습니다: "{value}" '
+                        '(예: 2026-10-01 또는 "2026-10-01 13:00")')
+
+    # 기간을 안 주면 최근 14일. 한쪽만 주면 나머지는 그 기준으로 채운다.
+    end = bounds.get('end') or timezone.now()
+    start = bounds.get('start') or end - datetime.timedelta(days=LAB_DEFAULT_DAYS)
+    if end - start > datetime.timedelta(days=LAB_MAX_DAYS):
+        return fail(f'source=lab은 한 번에 최대 {LAB_MAX_DAYS}일까지 조회할 수 있습니다. '
+                    '기간을 나눠서 요청하세요')
+
+    sensor = settings.OPENSRC_LAB_SENSOR
+    location = SensorLocation.objects.filter(sensor=sensor).values('latitude', 'longitude').first()
+    lat, lon = (location['latitude'], location['longitude']) if location else (None, None)
+
+    # (sensor, sensing_time) 인덱스를 그대로 탄다
+    qs = (SensorData.objects
+          .filter(sensor=sensor, sensing_time__gte=start.timestamp(), sensing_time__lt=end.timestamp())
+          .order_by('sensing_time')
+          .values(*LAB_COLUMNS))
+
+    def row(v):
+        return _lab_row(v, lat, lon)
+
+    if (request.GET.get('format') or 'json').lower() == 'csv':
+        filename = f'opensrc_lab_{sensor}.csv'.replace(' ', '_')
+        return csv_response(LAB_HEADER, qs, row, filename)
+
+    rows = [row(v) for v in qs.iterator(chunk_size=2000)]
+    return ok({'source': 'lab', 'sensor': sensor, 'count': len(rows), 'data': rows})

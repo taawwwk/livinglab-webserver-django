@@ -1,8 +1,11 @@
 import datetime
 import json
+import time
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
+
+from sensor.models import SensorData, SensorLocation
 
 from .models import TeamSubmission
 
@@ -188,3 +191,85 @@ class TeamDataApiTests(TestCase):
     def test_no_trailing_slash(self):
         r = self.client.get('/sensor/opensrc/data', {'key': 'opensrc-team 2'})
         self.assertEqual(r.json()['count'], 1)
+
+
+@override_settings(OPENSRC_TEAM_COUNT=9, OPENSRC_LAB_SENSOR='sensor 01')
+class LabDataApiTests(TestCase):
+    url = '/sensor/opensrc/data/'
+
+    @staticmethod
+    def kst(text):
+        return timezone.make_aware(datetime.datetime.strptime(text, '%Y-%m-%d %H:%M:%S'),
+                                   timezone.get_current_timezone()).timestamp()
+
+    def lab(self, sensing_time, sensor='sensor 01', temperature=25.5, co2=500):
+        return SensorData.objects.create(
+            sensor=sensor, mac='D8:3A:DD:00:00:01', receiver='sensor', mode='direct',
+            temperature=temperature, co2=co2, sensing_time=sensing_time)
+
+    def get(self, **params):
+        params.setdefault('key', 'opensrc-team 4')
+        params.setdefault('source', 'lab')
+        return self.client.get(self.url, params)
+
+    def setUp(self):
+        SensorLocation.objects.create(sensor='sensor 01', latitude=36.626906, longitude=127.457722)
+
+    def test_default_window_is_last_14_days(self):
+        now = time.time()
+        self.lab(now - 86400, temperature=21.0)
+        self.lab(now - 20 * 86400, temperature=99.0)                 # 14일 밖
+        self.lab(now - 86400, sensor='sensor 02', temperature=77.0)  # 다른 센서
+        payload = self.get().json()
+        self.assertEqual((payload['source'], payload['sensor'], payload['count']), ('lab', 'sensor 01', 1))
+        row = payload['data'][0]
+        self.assertEqual(set(row), {'received_at', 'sensor', 'mac', 'temp', 'co2', 'timestamp',
+                                    'lat', 'lon', 'sender'})
+        self.assertEqual((row['temp'], row['sender'], row['lat'], row['lon']),
+                         (21.0, 'sensor', 36.626906, 127.457722))
+
+    def test_range_order_and_raw_values(self):
+        self.lab(self.kst('2026-09-11 12:00:00') + 0.25, temperature=-50.0, co2=0)
+        self.lab(self.kst('2026-09-10 09:00:00'))
+        self.lab(self.kst('2026-09-12 08:00:00'))
+        rows = self.get(start='2026-09-10', end='2026-09-11').json()['data']
+        self.assertEqual([r['received_at'] for r in rows],
+                         ['2026-09-10 09:00:00', '2026-09-11 12:00:00'])
+        # 센서 오류값(-50℃, co2 0)과 소수점 timestamp도 정제 없이 그대로
+        self.assertEqual((rows[1]['temp'], rows[1]['co2']), (-50.0, 0))
+        self.assertEqual(rows[1]['timestamp'], self.kst('2026-09-11 12:00:00') + 0.25)
+
+        # end만 주면 그 시점부터 14일 전까지
+        self.assertEqual(self.get(end='2026-09-12').json()['count'], 3)
+
+    def test_span_limit_and_bad_dates(self):
+        r = self.get(start='2026-08-01', end='2026-09-30')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('31일', r.json()['message'])
+        r = self.get(start='09-01')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('start', r.json()['message'])
+
+    def test_key_and_source_validation(self):
+        for params in ({'key': ''}, {'key': 'opensrc2026'}):
+            r = self.get(**params)
+            self.assertEqual(r.status_code, 400)
+            self.assertIn('key', r.json()['message'])
+        r = self.get(source='weather')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('source', r.json()['message'])
+
+    def test_csv(self):
+        self.lab(self.kst('2026-09-10 09:00:00'), temperature=21.5, co2=612)
+        r = self.get(start='2026-09-10', end='2026-09-10', format='csv')
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('attachment', r['Content-Disposition'])
+        lines = b''.join(r.streaming_content).decode('utf-8-sig').strip().splitlines()
+        self.assertEqual(lines[0], 'received_at,sensor,mac,temp,co2,timestamp,lat,lon,sender')
+        self.assertTrue(lines[1].startswith('2026-09-10 09:00:00,sensor 01,D8:3A:DD:00:00:01,21.5,612,'))
+
+    def test_team_mode_unchanged(self):
+        # source가 없거나 team이면 기존 팀 데이터 응답 형식 그대로
+        for params in ({}, {'source': 'team'}):
+            payload = self.client.get(self.url, {'key': 'opensrc-team 4', **params}).json()
+            self.assertEqual((payload['team'], payload['count']), ('Team 4', 0))

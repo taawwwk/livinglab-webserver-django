@@ -142,3 +142,5 @@ OPENSRC_HMAC_KEY = os.getenv('OPENSRC_HMAC_KEY', '').encode()
 OPENSRC_TAG_LEN = int(os.getenv('OPENSRC_TAG_LEN', '8'))
 # 5주차 실습: 팀 수. 팀명은 'Team 1'..'Team N', key는 'opensrc-team 1'..'opensrc-team N'
 OPENSRC_TEAM_COUNT = int(os.getenv('OPENSRC_TEAM_COUNT', '9'))
+# 6주차 data API의 source=lab이 내보내는 연구실 센서 (sensor_sensor_data.sensor 값)
+OPENSRC_LAB_SENSOR = os.getenv('OPENSRC_LAB_SENSOR', 'sensor 01')
