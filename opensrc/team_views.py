@@ -257,7 +257,7 @@ def data(request):
 
     source = _normalize(request.GET.get('source'))
     if source == 'lab':
-        return _lab_data(request)
+        return _lab_data(request, team)
     if source not in ('', 'team'):
         return fail('source는 생략하거나 "lab"이어야 합니다')
 
@@ -293,7 +293,7 @@ def data(request):
 
 
 # ---------------------------------------------------------------------------
-# source=lab: 연구실(리빙랩) 센서 1대의 원본 데이터
+# source=lab: 연구실(리빙랩) 센서 원본 데이터 (팀마다 배정된 센서 1대)
 # ---------------------------------------------------------------------------
 # sensor_sensor_data에는 서버 수신 시각 컬럼이 없고 센서가 보낸 sensing_time만 있다.
 # 그래서 received_at도 sensing_time을 KST로 바꾼 값이며, 기간 필터·정렬도 sensing_time 기준이다.
@@ -321,7 +321,7 @@ def _lab_row(v, lat, lon):
     }
 
 
-def _lab_data(request):
+def _lab_data(request, team):
     bounds = {}
     for param, is_end in (('start', False), ('end', True)):
         value = request.GET.get(param)
@@ -339,7 +339,8 @@ def _lab_data(request):
         return fail(f'source=lab은 한 번에 최대 {LAB_MAX_DAYS}일까지 조회할 수 있습니다. '
                     '기간을 나눠서 요청하세요')
 
-    sensor = settings.OPENSRC_LAB_SENSOR
+    # 팀 키로 센서가 정해진다. 학생이 쿼리로 센서를 고를 수는 없다.
+    sensor = settings.OPENSRC_LAB_SENSOR_BY_TEAM.get(team, settings.OPENSRC_LAB_SENSOR)
     location = SensorLocation.objects.filter(sensor=sensor).values('latitude', 'longitude').first()
     lat, lon = (location['latitude'], location['longitude']) if location else (None, None)
 

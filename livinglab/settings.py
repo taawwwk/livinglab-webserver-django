@@ -142,5 +142,18 @@ OPENSRC_HMAC_KEY = os.getenv('OPENSRC_HMAC_KEY', '').encode()
 OPENSRC_TAG_LEN = int(os.getenv('OPENSRC_TAG_LEN', '8'))
 # 5주차 실습: 팀 수. 팀명은 'Team 1'..'Team N', key는 'opensrc-team 1'..'opensrc-team N'
 OPENSRC_TEAM_COUNT = int(os.getenv('OPENSRC_TEAM_COUNT', '9'))
-# 6주차 data API의 source=lab이 내보내는 연구실 센서 (sensor_sensor_data.sensor 값)
+# 6주차 data API의 source=lab: 팀마다 서로 다른 연구실 센서를 배정한다 (sensor_sensor_data.sensor 값).
+# 2026-09-28 ~ 10-04 기준 1분 결측률이 낮은 순서로 9대를 골랐다.
+OPENSRC_LAB_SENSOR_BY_TEAM = {
+    'Team 1': 'sensor 20',
+    'Team 2': 'sensor 01',
+    'Team 3': 'sensor 26',
+    'Team 4': 'sensor 21',
+    'Team 5': 'sensor 14',
+    'Team 6': 'sensor 06',
+    'Team 7': 'sensor 33',
+    'Team 8': 'sensor 15',
+    'Team 9': 'sensor 04',
+}
+# 위 매핑에 없는 팀일 때 쓰는 기본 센서
 OPENSRC_LAB_SENSOR = os.getenv('OPENSRC_LAB_SENSOR', 'sensor 01')

@@ -193,7 +193,8 @@ class TeamDataApiTests(TestCase):
         self.assertEqual(r.json()['count'], 1)
 
 
-@override_settings(OPENSRC_TEAM_COUNT=9, OPENSRC_LAB_SENSOR='sensor 01')
+@override_settings(OPENSRC_TEAM_COUNT=9, OPENSRC_LAB_SENSOR='sensor 03',
+                   OPENSRC_LAB_SENSOR_BY_TEAM={'Team 4': 'sensor 01', 'Team 5': 'sensor 02'})
 class LabDataApiTests(TestCase):
     url = '/sensor/opensrc/data/'
 
@@ -273,3 +274,31 @@ class LabDataApiTests(TestCase):
         for params in ({}, {'source': 'team'}):
             payload = self.client.get(self.url, {'key': 'opensrc-team 4', **params}).json()
             self.assertEqual((payload['team'], payload['count']), ('Team 4', 0))
+
+    def test_sensor_assigned_per_team(self):
+        now = time.time()
+        for sensor, temp in (('sensor 01', 21.0), ('sensor 02', 22.0), ('sensor 03', 23.0)):
+            self.lab(now - 3600, sensor=sensor, temperature=temp)
+
+        def fetch(team_no, **extra):
+            payload = self.get(key=f'opensrc-team {team_no}', **extra).json()
+            return payload['sensor'], [r['sensor'] for r in payload['data']], [r['temp'] for r in payload['data']]
+
+        self.assertEqual(fetch(4), ('sensor 01', ['sensor 01'], [21.0]))
+        self.assertEqual(fetch(5), ('sensor 02', ['sensor 02'], [22.0]))
+        # 매핑에 없는 팀은 OPENSRC_LAB_SENSOR 기본값
+        self.assertEqual(fetch(9), ('sensor 03', ['sensor 03'], [23.0]))
+        # 학생이 쿼리로 센서를 바꿀 수 없다 (sensor, team=all 모두 무시)
+        self.assertEqual(fetch(4, sensor='sensor 02'), ('sensor 01', ['sensor 01'], [21.0]))
+        self.assertEqual(fetch(4, team='all'), ('sensor 01', ['sensor 01'], [21.0]))
+        # CSV 파일명에도 배정된 센서가 들어간다
+        r = self.get(key='opensrc-team 5', format='csv')
+        self.assertIn('opensrc_lab_sensor_02.csv', r['Content-Disposition'])
+
+
+class LabSensorMappingSettingsTests(TestCase):
+    def test_every_team_has_distinct_sensor(self):
+        from django.conf import settings
+        mapping = settings.OPENSRC_LAB_SENSOR_BY_TEAM
+        self.assertEqual(set(mapping), {f'Team {n}' for n in range(1, settings.OPENSRC_TEAM_COUNT + 1)})
+        self.assertEqual(len(set(mapping.values())), len(mapping))
