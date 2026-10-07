@@ -1,12 +1,16 @@
 import datetime
 import io
 import json
+from unittest import mock
 
+from django.core.cache import caches
 from django.core.management import call_command
+from django.conf import settings
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from .models import ShopSite, WaterLevelReading
+from .throttling import DeviceKeyRateThrottle
 
 KEY = 'test-key-1'
 URL = '/api/shop/readings/'
@@ -19,9 +23,17 @@ def ts(minutes_ago=0, seconds=0):
     return t.astimezone(KST).replace(microsecond=0).isoformat()
 
 
-@override_settings(SHOP_API_KEYS=[KEY, 'test-key-2'])
+TEST_CACHES = {
+    'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'},
+    'shopsense_throttle': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+                           'LOCATION': 'shopsense-throttle-test'},
+}
+
+
+@override_settings(SHOP_API_KEYS=[KEY, 'test-key-2'], CACHES=TEST_CACHES)
 class ShopTestCase(TestCase):
     def setUp(self):
+        caches['shopsense_throttle'].clear()  # 테스트끼리 rate limit 카운터가 섞이지 않게
         # baseline 150cm, 수위 30cm 이상 warn, 60cm 이상 danger
         self.site = ShopSite.objects.create(name='대학가 가게 1호', baseline_cm=150.0,
                                             warn_level_cm=30.0, danger_level_cm=60.0)
@@ -248,3 +260,46 @@ class HealthAndCommandTests(ShopTestCase):
         self.assertNotIn('정상 가게', text)
         self.assertIn('checked=3 stale=2', text)
         self.assertEqual(len(logs.output), 2)
+
+
+class ThrottleTests(ShopTestCase):
+    def setUp(self):
+        super().setUp()
+        self.base = timezone.now().replace(microsecond=0)  # 루프 중 초가 넘어가도 시각이 겹치지 않게 고정
+
+    def body(self, seconds_ago):
+        t = self.base - datetime.timedelta(seconds=seconds_ago)
+        return {'site_id': self.site.pk, 'measured_at': t.isoformat(), 'distance_cm': 140.0}
+
+    def test_default_is_60_per_minute_per_key(self):
+        self.assertEqual(settings.SHOP_POST_RATE, '60/min')
+        for i in range(60):
+            self.assertIn(self.post(self.body(i + 1)).status_code, (200, 201), i)
+        r = self.post(self.body(100))
+        self.assertEqual(r.status_code, 429)
+        self.assertTrue(int(r['Retry-After']) > 0)
+        # 다른 키는 따로 센다
+        self.assertEqual(self.post(self.body(101), key='test-key-2').status_code, 201)
+        self.assertEqual(WaterLevelReading.objects.count(), 61)
+
+    @override_settings(SHOP_POST_RATE='3/min')
+    def test_window_resets_and_only_post_is_limited(self):
+        now = [1_000_000.0]
+        with mock.patch.object(DeviceKeyRateThrottle, 'timer', lambda self: now[0]):
+            for i in range(3):
+                self.post(self.body(i + 1))
+            self.assertEqual(self.post(self.body(10)).status_code, 429)
+            # 조회는 제한하지 않는다
+            for _ in range(5):
+                self.assertEqual(self.get(URL, site_id=self.site.pk).status_code, 200)
+            # 잘못된 키 요청은 401로 끝나고 카운트에 영향 없음
+            self.assertEqual(self.post(self.body(11), key='nope').status_code, 401)
+            now[0] += 61
+            self.assertEqual(self.post(self.body(12)).status_code, 201)
+
+    @override_settings(SHOP_POST_RATE='2/min')
+    def test_rejected_payloads_also_count(self):
+        # 잘못된 데이터를 계속 보내는 장비도 막아야 하므로 400도 횟수에 포함된다
+        self.assertEqual(self.post(dict(self.body(1), distance_cm=-1)).status_code, 400)
+        self.assertEqual(self.post(dict(self.body(2), distance_cm=-1)).status_code, 400)
+        self.assertEqual(self.post(self.body(3)).status_code, 429)

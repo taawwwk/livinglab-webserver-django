@@ -14,6 +14,7 @@ from . import alerts, levels
 from .authentication import DeviceAPIKeyAuthentication, ViewerAuthentication
 from .models import ShopSite, WaterLevelReading
 from .serializers import BatchReadingSerializer, SingleReadingSerializer
+from .throttling import DeviceKeyRateThrottle
 
 logger = logging.getLogger('shopsense')
 
@@ -69,6 +70,12 @@ class ReadingsView(APIView):
         if self.request.method == 'POST':
             return [DeviceAPIKeyAuthentication()]
         return [ViewerAuthentication()]
+
+    def get_throttles(self):
+        # 쓰기만 키당 횟수 제한 (settings.SHOP_POST_RATE). 초과 시 429 + Retry-After
+        if self.request.method == 'POST':
+            return [DeviceKeyRateThrottle()]
+        return []
 
     def post(self, request):
         if not isinstance(request.data, dict):

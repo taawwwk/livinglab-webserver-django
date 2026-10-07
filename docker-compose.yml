@@ -41,6 +41,8 @@ services:
       OPENSRC_TAG_LEN: ${OPENSRC_TAG_LEN:-8}
       # 가게 침수 실증 수위센서 API 키 (콤마 구분, .env에서 읽음). 비어 있으면 요청 전부 거부
       SHOP_API_KEYS: ${SHOP_API_KEYS:-}
+      # POST 키당 허용 횟수 (DRF 형식)
+      SHOP_POST_RATE: ${SHOP_POST_RATE:-60/min}
     ports:
       - "127.0.0.1:8081:10021"
     depends_on:

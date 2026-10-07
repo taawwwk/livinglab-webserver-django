@@ -167,3 +167,20 @@ OPENSRC_LAB_SENSOR = os.getenv('OPENSRC_LAB_SENSOR', 'sensor 01')
 # 대학가 가게 침수 실증 (shopsense): 수위센서 API 키. 콤마로 여러 개(장비별·교체용) 지정.
 # 비어 있으면 /api/shop/ 의 POST·조회 요청을 모두 거부한다. 키는 .env에만 둔다.
 SHOP_API_KEYS = [k.strip() for k in os.getenv('SHOP_API_KEYS', '').split(',') if k.strip()]
+# POST /api/shop/readings/ 의 API 키당 허용 횟수 (DRF 형식: '60/min', '1000/hour' 등).
+# 파이 1대는 정상 시 분당 6회, 밀린 데이터 재전송 중에도 분당 30회 이내로 보낸다.
+SHOP_POST_RATE = os.getenv('SHOP_POST_RATE', '60/min')
+SHOP_THROTTLE_CACHE = 'shopsense_throttle'
+
+CACHES = {
+    # 기존과 같은 기본값 (명시만 함)
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+    },
+    # shopsense rate limit 카운터. gunicorn worker들이 같은 컨테이너의 파일을 공유해야
+    # 키당 한도가 worker 수만큼 늘어나지 않는다. 컨테이너를 재생성하면 초기화된다.
+    SHOP_THROTTLE_CACHE: {
+        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'LOCATION': '/tmp/shopsense_throttle',
+    },
+}

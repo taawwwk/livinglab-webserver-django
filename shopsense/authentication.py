@@ -6,6 +6,7 @@
 
 키는 환경변수 SHOP_API_KEYS(콤마 구분)로만 관리한다. 비어 있으면 모든 요청을 거부한다.
 """
+import hashlib
 import hmac
 
 from django.conf import settings
@@ -20,21 +21,21 @@ class APIKeyClient:
     is_authenticated = True
     is_anonymous = False
 
-    def __init__(self, key_index):
-        # 어떤 키로 들어왔는지(키 자체가 아니라 순번)만 남긴다. 키 교체 시 추적용.
-        self.key_index = key_index
+    def __init__(self, key):
+        # 키 원문 대신 해시 앞부분만 들고 다닌다 (rate limit 식별자, 로그용)
+        self.key_id = hashlib.sha256(key.encode()).hexdigest()[:12]
 
     def __str__(self):
-        return f'api-key#{self.key_index}'
+        return f'api-key:{self.key_id}'
 
 
 def match_api_key(given):
-    """SHOP_API_KEYS 중 일치하는 키의 순번, 없으면 None. 타이밍 공격을 피하려고 compare_digest로 전부 비교한다."""
+    """SHOP_API_KEYS 중 일치하는 키, 없으면 None. 타이밍 공격을 피하려고 compare_digest로 전부 비교한다."""
     matched = None
     given_bytes = given.encode()
-    for index, key in enumerate(settings.SHOP_API_KEYS):
+    for key in settings.SHOP_API_KEYS:
         if hmac.compare_digest(given_bytes, key.encode()):
-            matched = index
+            matched = key
     return matched
 
 
@@ -43,10 +44,10 @@ class DeviceAPIKeyAuthentication(authentication.BaseAuthentication):
         given = request.headers.get(API_KEY_HEADER)
         if not given:
             return None  # → NotAuthenticated (401)
-        index = match_api_key(given)
-        if index is None:
+        key = match_api_key(given)
+        if key is None:
             raise exceptions.AuthenticationFailed('API 키가 올바르지 않습니다.')
-        return APIKeyClient(index), None
+        return APIKeyClient(key), None
 
     def authenticate_header(self, request):
         # 이 값이 있어야 DRF가 403이 아닌 401로 응답한다
