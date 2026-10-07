@@ -14,10 +14,10 @@ STALE_AFTER = datetime.timedelta(minutes=5)
 
 
 def level_cm(site, distance_cm):
-    """수위 = baseline - 측정거리. 측정 실패(null)면 None."""
+    """수위 = baseline - 측정거리. 측정 실패(null)면 None. 부동소수점 잡음(30.799999...)을 없애려고 2자리로 반올림."""
     if distance_cm is None:
         return None
-    return site.baseline_cm - distance_cm
+    return round(site.baseline_cm - distance_cm, 2)
 
 
 def level_status(site, level):

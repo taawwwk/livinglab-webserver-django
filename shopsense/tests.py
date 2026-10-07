@@ -207,7 +207,7 @@ class LatestStatusTests(ShopTestCase):
             self.add(distance, minutes_ago=minutes)
             body = self.latest()
             self.assertEqual(body['status'], expected, distance)
-            self.assertEqual(body['reading']['level_cm'], 150.0 - distance)
+            self.assertEqual(body['reading']['level_cm'], round(150.0 - distance, 2))
             self.assertFalse(body['stale'])
 
     def test_failed_latest_reading_is_no_data_with_last_valid(self):
