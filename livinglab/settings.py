@@ -19,6 +19,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'sensor',
     'opensrc',
+    'shopsense',
 ]
 
 MIDDLEWARE = [
@@ -124,6 +125,11 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
+        'shopsense': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
         'apscheduler': {
             'handlers': ['console'],
             'level': 'WARNING',
@@ -157,3 +163,7 @@ OPENSRC_LAB_SENSOR_BY_TEAM = {
 }
 # 위 매핑에 없는 팀일 때 쓰는 기본 센서
 OPENSRC_LAB_SENSOR = os.getenv('OPENSRC_LAB_SENSOR', 'sensor 01')
+
+# 대학가 가게 침수 실증 (shopsense): 수위센서 API 키. 콤마로 여러 개(장비별·교체용) 지정.
+# 비어 있으면 /api/shop/ 의 POST·조회 요청을 모두 거부한다. 키는 .env에만 둔다.
+SHOP_API_KEYS = [k.strip() for k in os.getenv('SHOP_API_KEYS', '').split(',') if k.strip()]

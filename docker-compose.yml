@@ -39,6 +39,8 @@ services:
       # 값은 이 디렉터리의 .env에 둔다 (git 미추적)
       OPENSRC_HMAC_KEY: ${OPENSRC_HMAC_KEY:?OPENSRC_HMAC_KEY must be set in .env}
       OPENSRC_TAG_LEN: ${OPENSRC_TAG_LEN:-8}
+      # 가게 침수 실증 수위센서 API 키 (콤마 구분, .env에서 읽음). 비어 있으면 요청 전부 거부
+      SHOP_API_KEYS: ${SHOP_API_KEYS:-}
     ports:
       - "127.0.0.1:8081:10021"
     depends_on:
