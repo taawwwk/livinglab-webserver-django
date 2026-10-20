@@ -48,6 +48,7 @@ def submit(request):
         return fail('필수 값이 없거나 형식이 잘못되었습니다: ' + ', '.join(missing))
 
     sub = Submission(
+        source=Submission.SOURCE_TEST,
         team=team[:100],
         sensor=sensor[:100],
         mac=str(get(body, 'mac') or '').strip()[:32],
@@ -126,7 +127,8 @@ def _serialize(s):
 
 
 def _filtered(request):
-    qs = Submission.objects.all()
+    # 이 파일의 조회 뷰는 4주차(test/) 데이터만 다룬다. 팀 업로드는 team_views 쪽.
+    qs = Submission.objects.filter(source=Submission.SOURCE_TEST)
     team = request.GET.get('team')
     if team:
         qs = qs.filter(team=team)
@@ -137,8 +139,9 @@ def _filtered(request):
 
 
 @require_GET
-def check(request):
-    return render(request, 'opensrc/check.html')
+def week4(request):
+    """4주차 수신 현황. 원래 check/ 였으나 check/ 는 7주차 중간평가 대시보드가 되었다."""
+    return render(request, 'opensrc/week4.html')
 
 
 @require_GET
@@ -154,7 +157,7 @@ def latest(request):
 @require_GET
 def summary(request):
     teams = (
-        Submission.objects.values('team')
+        Submission.objects.filter(source=Submission.SOURCE_TEST).values('team')
         .annotate(
             total=Count('id'),
             verified=Count('id', filter=Q(status=Submission.STATUS_VERIFIED)),

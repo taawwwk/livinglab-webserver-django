@@ -1,6 +1,8 @@
 """5주차 실습: 팀이 직접 만든 센서 데이터 업로드 API와 조회 화면.
 
-6주차 데이터 분석 실습에서는 아래 data() 뷰로 자기 팀 데이터를 내려받는다.
+6주차 데이터 분석 실습에서는 아래 data() 뷰로 자기 팀 데이터를 내려받고,
+7주차 데이터 수집 실습에서는 같은 upload API로 캠퍼스 센서(opensrc_team1~5) 데이터를 올린다.
+저장은 모두 Submission(source='upload') 한 테이블이다.
 """
 import datetime
 import logging
@@ -18,7 +20,7 @@ from django.views.decorators.http import require_GET, require_POST
 from sensor.models import SensorData, SensorLocation
 
 from .common import client_ip, csv_response, fail, get, load_body, ok, to_number
-from .models import TeamSubmission
+from .models import Submission
 
 logger = logging.getLogger('opensrc')
 
@@ -43,6 +45,9 @@ REQUIRED = [
     ('temp', float), ('humidity', float), ('AQI', int), ('TVOC', int), ('eCO2', int),
     ('timestamp', int), ('lat', float), ('lon', float),
 ]
+# 7주차에 추가된 선택 필드. 5주차 앱은 안 보내므로 없어도 저장은 하되 경고를 남긴다.
+# (중간평가 유효 데이터 판정은 opensrc/grading.py — rssi가 없거나 0, -100~0 밖이면 무효)
+RSSI_MIN, RSSI_MAX = -100, 0
 
 
 def team_keys():
@@ -63,6 +68,23 @@ def team_for_key(key):
     return None
 
 
+def team_number(team):
+    """'Team 3' → 3"""
+    return int(re.search(r'\d+', team).group())
+
+
+def parse_team_no(value):
+    """body의 team: 3, "3", "Team 3", "team3", "3팀" 모두 허용. 못 읽으면 None."""
+    if value is None or value == '':
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return int(value) if float(value).is_integer() else None
+    match = re.fullmatch(r'\s*(?:team\s*)?(\d+)\s*(?:팀)?\s*', str(value), re.IGNORECASE)
+    return int(match.group(1)) if match else None
+
+
 @csrf_exempt
 @require_POST
 def upload(request):
@@ -74,10 +96,15 @@ def upload(request):
     if team is None:
         return fail('key가 올바르지 않습니다 (팀별로 발급된 key를 사용하세요)')
 
-    # team을 함께 보냈다면 key가 가리키는 팀과 같아야 한다 (다른 팀 key를 쓰면 바로 알 수 있게)
+    # team은 선택. 보냈다면 key가 가리키는 팀과 같아야 한다 (다른 팀 key를 쓰면 바로 알 수 있게)
+    team_no = team_number(team)
     given_team = get(body, 'team')
-    if given_team and _normalize(given_team) != _normalize(team):
-        return fail(f'key는 {team}의 것인데 team은 "{given_team}"입니다')
+    if given_team not in (None, ''):
+        given_no = parse_team_no(given_team)
+        if given_no is None:
+            return fail(f'team은 1~{settings.OPENSRC_TEAM_COUNT} 사이의 정수여야 합니다 (받은 값: "{given_team}")')
+        if given_no != team_no:
+            return fail(f'key는 {team}의 것인데 team은 "{given_team}"입니다')
 
     values, missing = {}, []
     for field, cast in REQUIRED:
@@ -93,8 +120,13 @@ def upload(request):
     if missing:
         return fail('필수 값이 없거나 형식이 잘못되었습니다: ' + ', '.join(missing))
 
-    sub = TeamSubmission(
+    rssi_raw = get(body, 'rssi')
+    rssi = to_number(rssi_raw, int)
+
+    sub = Submission(
+        source=Submission.SOURCE_UPLOAD,
         team=team,
+        team_no=team_no,
         sensor=values['sensor'][:100],
         mac=values['mac'][:32],
         sender=values['sender'][:100],
@@ -102,27 +134,40 @@ def upload(request):
         temp=values['temp'], humidity=values['humidity'], aqi=values['AQI'],
         tvoc=values['TVOC'], eco2=values['eCO2'], timestamp=values['timestamp'],
         lat=values['lat'], lon=values['lon'],
+        rssi=rssi,
     )
 
     out_of_range = [key for key, field, low, high in RANGES if not low <= getattr(sub, field) <= high]
     if not TS_MIN <= sub.timestamp <= time.time() + TS_FUTURE_MARGIN:
         out_of_range.append('timestamp')
+    if rssi is not None and not RSSI_MIN <= rssi <= RSSI_MAX:
+        out_of_range.append('rssi')
+
+    warnings = []
+    if rssi is None:
+        warnings.append('rssi 없음' if rssi_raw in (None, '') else f'rssi 형식 오류 ("{rssi_raw}")')
     if out_of_range:
-        sub.status = TeamSubmission.STATUS_OUT_OF_RANGE
-        sub.detail = '범위를 벗어난 값: ' + ', '.join(out_of_range)
+        sub.status = Submission.STATUS_OUT_OF_RANGE
+        warnings.insert(0, '범위를 벗어난 값: ' + ', '.join(out_of_range))
     else:
-        sub.status = TeamSubmission.STATUS_OK
+        sub.status = Submission.STATUS_OK
+    sub.detail = '; '.join(warnings)[:255]
     sub.save()
 
-    if sub.status == TeamSubmission.STATUS_OUT_OF_RANGE:
+    if sub.status == Submission.STATUS_OUT_OF_RANGE:
+        # rssi 누락은 7주차 전 앱이 전부 해당해 행마다 찍으면 로그가 가득 차므로 detail 에만 남긴다
         logger.info(f'opensrc team upload out of range: team={team} detail={sub.detail}')
-    return ok({
+    response = {
         'result': 'Success',
         'message': f'Data received from {team} successfully!',
         'received_data': {'team': team, 'sensor': sub.sensor},
         'status': sub.status,
         'detail': sub.detail,
-    })
+    }
+    if rssi is None:
+        # 7주차 중간평가: rssi가 없으면 저장은 되지만 유효 데이터로 인정되지 않는다
+        response['warning'] = 'rssi가 없어 중간평가 유효 데이터로 인정되지 않습니다 (-100~0 정수)'
+    return ok(response)
 
 
 def _serialize(s):
@@ -139,14 +184,19 @@ def _serialize(s):
         'timestamp': s.timestamp,
         'lat': s.lat,
         'lon': s.lon,
+        'rssi': s.rssi,
         'sender': s.sender,
         'status': s.status,
         'detail': s.detail,
     }
 
 
+def uploads():
+    return Submission.objects.filter(source=Submission.SOURCE_UPLOAD)
+
+
 def _filtered(request):
-    qs = TeamSubmission.objects.all()
+    qs = uploads()
     team = request.GET.get('team')
     if team:
         qs = qs.filter(team=team)
@@ -173,9 +223,9 @@ def latest(request):
 @require_GET
 def summary(request):
     rows = {
-        r['team']: r for r in TeamSubmission.objects.values('team').annotate(
+        r['team']: r for r in uploads().values('team').annotate(
             total=Count('id'),
-            normal=Count('id', filter=Q(status=TeamSubmission.STATUS_OK)),
+            normal=Count('id', filter=Q(status=Submission.STATUS_OK)),
             sensors=Count('mac', distinct=True),
             last=Max('received_at'),
         )
@@ -197,7 +247,7 @@ def summary(request):
 @require_GET
 def export_csv(request):
     header = ['received_at', 'team', 'sensor', 'mac', 'temp', 'humidity', 'AQI', 'TVOC',
-              'eCO2', 'timestamp', 'lat', 'lon', 'sender', 'status', 'detail']
+              'eCO2', 'timestamp', 'lat', 'lon', 'rssi', 'sender', 'status', 'detail']
     filename = f"opensrc_teams_{request.GET.get('team') or 'all'}.csv".replace(' ', '_')
     return csv_response(header, _filtered(request).order_by('received_at'), _serialize, filename)
 
@@ -208,9 +258,9 @@ def export_csv(request):
 
 # values()로 가져올 DB 컬럼. 수만 행을 다루므로 필요한 것만 꺼낸다.
 DATA_COLUMNS = ['received_at', 'team', 'sensor', 'mac', 'temp', 'humidity', 'aqi', 'tvoc',
-                'eco2', 'timestamp', 'lat', 'lon', 'sender', 'status']
+                'eco2', 'timestamp', 'lat', 'lon', 'rssi', 'sender', 'status']
 DATA_HEADER = ['received_at', 'team', 'sensor', 'mac', 'temp', 'humidity', 'AQI', 'TVOC',
-               'eCO2', 'timestamp', 'lat', 'lon', 'sender', 'status']
+               'eCO2', 'timestamp', 'lat', 'lon', 'rssi', 'sender', 'status']
 DATE_FORMATS = ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d']
 
 
@@ -229,6 +279,7 @@ def _data_row(v):
         'timestamp': v['timestamp'],
         'lat': v['lat'],
         'lon': v['lon'],
+        'rssi': v['rssi'],
         'sender': v['sender'],
         'status': v['status'],
     }
@@ -261,7 +312,7 @@ def data(request):
     if source not in ('', 'team'):
         return fail('source는 생략하거나 "lab"이어야 합니다')
 
-    qs = TeamSubmission.objects.all()
+    qs = uploads()
     scope = request.GET.get('team')
     if not scope:
         qs = qs.filter(team=team)

@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from sensor.models import SensorData, SensorLocation
 
-from .models import TeamSubmission
+from .models import Submission
 
 VALUES = {'sensor': 'team1 sensor', 'mac': 'DC:A6:32:AA:BB:CC', 'sender': 'abcd-1234',
           'temp': 23.4, 'humidity': 51.2, 'AQI': 2, 'TVOC': 120, 'eCO2': 450,
@@ -32,8 +32,12 @@ class TeamUploadTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()['result'], 'Success')
         self.assertEqual(r.json()['status'], 'ok')
-        s = TeamSubmission.objects.get()
+        s = Submission.objects.get()
         self.assertEqual((s.team, s.sensor, s.eco2), ('Team 1', 'team1 sensor', 450))
+        self.assertEqual((s.source, s.team_no, s.rssi), ('upload', 1, None))
+        # 7주차 전 앱은 rssi 를 안 보낸다 → 저장은 되지만 경고
+        self.assertIn('rssi', r.json()['warning'])
+        self.assertIn('rssi 없음', s.detail)
 
     def test_key_forms_and_team_optional(self):
         # 공백/대소문자 차이는 허용하고, team은 생략해도 key로 판별한다
@@ -41,7 +45,7 @@ class TeamUploadTests(TestCase):
             data = body(key=key)
             del data['team']
             self.assertEqual(self.post(data).status_code, 200, key)
-        self.assertEqual(set(TeamSubmission.objects.values_list('team', flat=True)), {'Team 9'})
+        self.assertEqual(set(Submission.objects.values_list('team', 'team_no')), {('Team 9', 9)})
 
     def test_no_trailing_slash_and_form_encoded(self):
         self.assertEqual(self.post(body(), url='/sensor/opensrc/upload').status_code, 200)
@@ -52,12 +56,40 @@ class TeamUploadTests(TestCase):
         for key in ('opensrc2026', 'opensrc-team 10', 'opensrc-team', ''):
             r = self.post(body(key=key))
             self.assertEqual(r.status_code, 400, key)
-        self.assertFalse(TeamSubmission.objects.exists())
+        self.assertFalse(Submission.objects.exists())
 
     def test_team_must_match_key(self):
-        r = self.post(body(key='opensrc-team 1', team='Team 2'))
+        for team in ('Team 2', 2, '2', 'team2'):
+            r = self.post(body(key='opensrc-team 1', team=team))
+            self.assertEqual(r.status_code, 400, team)
+            self.assertIn('Team 1', r.json()['message'])
+        r = self.post(body(key='opensrc-team 1', team='abc'))
         self.assertEqual(r.status_code, 400)
-        self.assertIn('Team 1', r.json()['message'])
+        self.assertIn('정수', r.json()['message'])
+        self.assertFalse(Submission.objects.exists())
+
+    def test_team_as_integer(self):
+        # 7주차 안내: team 은 1~9 정수. 문자열 "Team 3", "3", "3팀" 도 받는다
+        for team in (3, '3', 'Team 3', ' team3 ', '3팀'):
+            r = self.post(body(key='opensrc-team 3', team=team))
+            self.assertEqual(r.status_code, 200, (team, r.content))
+        self.assertEqual(set(Submission.objects.values_list('team', 'team_no')), {('Team 3', 3)})
+
+    def test_rssi(self):
+        r = self.post(body(rssi=-67))
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn('warning', r.json())
+        self.assertEqual(Submission.objects.get().rssi, -67)
+        self.assertEqual(Submission.objects.get().detail, '')
+        # 범위 밖 rssi 는 저장하되 out_of_range 로 표시
+        r = self.post(body(rssi=12))
+        self.assertEqual(r.json()['status'], 'out_of_range')
+        self.assertIn('rssi', r.json()['detail'])
+        # 형식 오류도 저장은 되고 경고
+        r = self.post(body(rssi='strong'))
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNone(Submission.objects.order_by('-id').first().rssi)
+        self.assertIn('rssi 형식 오류', r.json()['detail'])
 
     def test_required_fields(self):
         for field in VALUES:
@@ -66,13 +98,13 @@ class TeamUploadTests(TestCase):
             r = self.post(data)
             self.assertEqual(r.status_code, 400, field)
             self.assertIn(field, r.json()['message'])
-        self.assertFalse(TeamSubmission.objects.exists())
+        self.assertFalse(Submission.objects.exists())
 
     def test_out_of_range_is_stored_not_rejected(self):
         r = self.post(body(humidity=250, temp=-100))
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()['status'], 'out_of_range')
-        s = TeamSubmission.objects.get()
+        s = Submission.objects.get()
         self.assertEqual(s.status, 'out_of_range')
         self.assertIn('humidity', s.detail)
         self.assertIn('temp', s.detail)
@@ -80,7 +112,7 @@ class TeamUploadTests(TestCase):
     def test_stale_clock_flagged(self):
         # RTC 없는 Pi가 1970년으로 시작하는 경우
         self.post(body(timestamp=100))
-        self.assertIn('timestamp', TeamSubmission.objects.get().detail)
+        self.assertIn('timestamp', Submission.objects.get().detail)
 
     def test_read_endpoints(self):
         self.post(body())
@@ -113,16 +145,17 @@ class TeamDataApiTests(TestCase):
 
     def make(self, team, received_at, **overrides):
         values = dict(VALUES, **overrides)
-        s = TeamSubmission.objects.create(
-            team=team, sensor=values['sensor'], mac=values['mac'], sender=values['sender'],
+        s = Submission.objects.create(
+            source=Submission.SOURCE_UPLOAD, team=team, team_no=int(team.split()[1]),
+            sensor=values['sensor'], mac=values['mac'], sender=values['sender'],
             temp=values['temp'], humidity=values['humidity'], aqi=values['AQI'],
             tvoc=values['TVOC'], eco2=values['eCO2'], timestamp=values['timestamp'],
-            lat=values['lat'], lon=values['lon'], status=TeamSubmission.STATUS_OK,
+            lat=values['lat'], lon=values['lon'], status=Submission.STATUS_OK,
         )
         # received_at은 auto_now_add라 생성 후에 덮어쓴다
         aware = timezone.make_aware(datetime.datetime.strptime(received_at, '%Y-%m-%d %H:%M:%S'),
                                     timezone.get_current_timezone())
-        TeamSubmission.objects.filter(pk=s.pk).update(received_at=aware)
+        Submission.objects.filter(pk=s.pk).update(received_at=aware)
         return s
 
     def setUp(self):
@@ -130,6 +163,8 @@ class TeamDataApiTests(TestCase):
         self.make('Team 1', '2026-10-02 23:30:00', temp=21.0)
         self.make('Team 1', '2026-10-03 08:00:00', temp=22.0)
         self.make('Team 2', '2026-10-02 10:00:00', temp=30.0)
+        # 4주차 행은 팀 데이터 조회에 섞이지 않는다
+        Submission.objects.create(source='test', team='Team 1', sensor='sensor 01', status='verified', temp=99.0)
 
     def test_own_team_only_sorted_ascending(self):
         r = self.client.get(self.url, {'key': 'opensrc-team 1'})
@@ -141,7 +176,7 @@ class TeamDataApiTests(TestCase):
                          ['2026-10-01 09:00:00', '2026-10-02 23:30:00', '2026-10-03 08:00:00'])
         self.assertEqual(set(payload['data'][0]), {
             'team', 'sensor', 'mac', 'temp', 'humidity', 'AQI', 'TVOC', 'eCO2',
-            'timestamp', 'lat', 'lon', 'sender', 'received_at', 'status'})
+            'timestamp', 'lat', 'lon', 'rssi', 'sender', 'received_at', 'status'})
 
     def test_date_range_filters(self):
         def temps(**params):
@@ -184,7 +219,7 @@ class TeamDataApiTests(TestCase):
         self.assertIn('attachment', r['Content-Disposition'])
         lines = b''.join(r.streaming_content).decode('utf-8-sig').strip().splitlines()
         self.assertEqual(lines[0], 'received_at,team,sensor,mac,temp,humidity,AQI,TVOC,'
-                                   'eCO2,timestamp,lat,lon,sender,status')
+                                   'eCO2,timestamp,lat,lon,rssi,sender,status')
         self.assertEqual(len(lines), 4)  # 헤더 + Team 1 데이터 3건
         self.assertTrue(lines[1].startswith('2026-10-01 09:00:00,Team 1,'))
 

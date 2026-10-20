@@ -29,11 +29,17 @@ def normalize_sensor_name(sensor_name):
     """
     센서 이름 정규화
     sensor1, sensor 1, sensor01, sensor 01 → sensor 01
+    opensrc_team1, Opensrc_Team1 → opensrc_team1 (정규화하지 않음)
     """
     if not sensor_name:
         return sensor_name
 
     sensor_name = sensor_name.strip().lower()
+
+    # 오픈소스 수업용 캠퍼스 센서(opensrc_team1 …)는 숫자를 뽑으면 연구실 'sensor 01'과 섞이므로
+    # 소문자화만 하고 이름을 그대로 둔다 (opensrc.models.CampusSensor.lab_sensor 와 맞춰야 함)
+    if 'opensrc' in sensor_name:
+        return sensor_name
 
     # 숫자만 추출
     match = re.search(r'(\d+)', sensor_name)

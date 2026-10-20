@@ -101,7 +101,12 @@ class SubmitTests(TestCase):
     def test_read_endpoints(self):
         self.post(body())
         self.post(body(team='team 2', raw=''))
-        self.assertEqual(self.client.get('/sensor/opensrc/check/').status_code, 200)
+        # 4주차 행은 source='test' 로 저장되고, 팀명은 자유 입력이라 team_no 는 비어 있다
+        self.assertEqual(set(Submission.objects.values_list('source', 'team_no')), {('test', None)})
+        # 4주차 확인 페이지는 check/ 에서 week4/ 로 옮겼다 (check/ 는 중간평가 대시보드)
+        self.assertEqual(self.client.get('/sensor/opensrc/week4/').status_code, 200)
+        # 팀 업로드(source='upload') 행은 4주차 조회에 섞이지 않는다
+        Submission.objects.create(source='upload', team='Team 9', team_no=9, sensor='x', status='ok')
         teams = self.client.get('/sensor/opensrc/api/summary').json()['teams']
         self.assertEqual([(t['team'], t['verified'], t['total']) for t in teams],
                          [('team 1', 1, 1), ('team 2', 0, 1)])

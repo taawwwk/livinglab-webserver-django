@@ -164,6 +164,18 @@ OPENSRC_LAB_SENSOR_BY_TEAM = {
 # 위 매핑에 없는 팀일 때 쓰는 기본 센서
 OPENSRC_LAB_SENSOR = os.getenv('OPENSRC_LAB_SENSOR', 'sensor 01')
 
+# 7주차 데이터 수집 실습 · 8주차 중간평가 (sensor/opensrc/check/)
+# 하루 시간대: 시작 시각 9시부터 1시간 단위로 18시 전까지 (09–10 … 17–18, 9칸)
+OPENSRC_SLOT_HOURS = range(int(os.getenv('OPENSRC_SLOT_START', '9')), int(os.getenv('OPENSRC_SLOT_END', '18')))
+# 캠퍼스 센서 실시간 ON/OFF 판정: 최근 N분 안에 livinglab 수신(sensor_sensor_data 또는 sensor_ip_db)이 있으면 ON
+OPENSRC_SENSOR_ONLINE_MINUTES = int(os.getenv('OPENSRC_SENSOR_ONLINE_MINUTES', '10'))
+# 채점: 만점에서 누락 칸당 감점, 최저 0점
+OPENSRC_MIDTERM_FULL_SCORE = int(os.getenv('OPENSRC_MIDTERM_FULL_SCORE', '10'))
+OPENSRC_MIDTERM_PENALTY = int(os.getenv('OPENSRC_MIDTERM_PENALTY', '2'))
+# 대시보드 API 결과 캐시(초). 45칸 × livinglab 조회를 폴링마다 반복하지 않도록 한다.
+OPENSRC_MIDTERM_CACHE_SECONDS = int(os.getenv('OPENSRC_MIDTERM_CACHE_SECONDS', '15'))
+# 수집 기간 날짜와 시간대별 담당 팀, 캠퍼스 센서 목록은 admin(수집 날짜 / 시간대 배정 / 캠퍼스 센서)에서 입력한다.
+
 # 대학가 가게 침수 실증 (shopsense): 수위센서 API 키. 콤마로 여러 개(장비별·교체용) 지정.
 # 비어 있으면 /api/shop/ 의 POST·조회 요청을 모두 거부한다. 키는 .env에만 둔다.
 SHOP_API_KEYS = [k.strip() for k in os.getenv('SHOP_API_KEYS', '').split(',') if k.strip()]
