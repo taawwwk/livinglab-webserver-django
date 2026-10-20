@@ -28,7 +28,8 @@ def merge_team_submissions(apps, schema_editor):
             f"SELECT 'upload', NULL, NULL, '', NULL, {cols} FROM opensrc_team_submission ORDER BY id"
         )
 
-    for team in Submission.objects.filter(source='upload').values_list('team', flat=True).distinct():
+    # Meta.ordering(-received_at)이 DISTINCT에 끼면 행마다 돌게 되므로 order_by()로 정렬을 지운다
+    for team in Submission.objects.filter(source='upload').order_by().values_list('team', flat=True).distinct():
         match = re.search(r'\d+', team or '')
         if match:
             Submission.objects.filter(source='upload', team=team).update(team_no=int(match.group()))
