@@ -102,8 +102,11 @@ class GradingTests(TestCase):
         m = lambda mac, name: getattr(grading.match_sensor(self.sensors, mac, name), 'number', None)
         self.assertEqual(m('b8-27-eb-00-00-01', 'whatever'), 1)         # 등록된 MAC 우선
         self.assertEqual(m('', 'Opensrc_Team 2'), 2)                      # 기기명 (대소문자·공백 무시)
-        self.assertEqual(m('AA:BB:CC:DD:EE:FF', 'opemsrc_team5'), 5)      # 오타 → team 번호
-        self.assertIsNone(m('AA:BB:CC:DD:EE:FF', 'team9 sensor'))         # 없는 번호
+        self.assertEqual(m('AA:BB:CC:DD:EE:FF', 'opensrc-team5'), 5)      # 기호 무시
+        self.assertEqual(m('2F:44:27:17:18:0E', 'opensrc_team1'), 1)      # MAC 등록돼 있어도 기기명 일치 인정 (iOS UUID)
+        # 번호만 같은 다른 이름은 캠퍼스 센서가 아니다 (5주차 자기 팀 센서, 오타)
+        for name in ('team3 sensor', 'Opensrc_team3 sensor', 'opemsrc_team5', 'team5'):
+            self.assertIsNone(m('AA:BB:CC:DD:EE:FF', name), name)
         self.assertIsNone(m('', ''))
 
     # --- 칸 판정 -------------------------------------------------------------

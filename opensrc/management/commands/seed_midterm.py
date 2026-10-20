@@ -113,10 +113,10 @@ class Command(BaseCommand):
                 elif scenario == 3:  # 누락: rssi 없이 올림 → 유효 데이터 0건
                     for i, s in enumerate(online):
                         n_sub += self.upload(slot.team_no, s, base, i, rssi=None)
-                else:                # 인정: 기기명 오타·대문자, MAC 미등록이어도 기기명으로 대응
+                else:                # 인정: 기기명 대문자·기호 차이는 무시, MAC 미등록이어도 기기명으로 대응
                     for i, s in enumerate(online):
                         n_sub += self.upload(slot.team_no, s, base, i, rssi=-55,
-                                             name=s.ble_name.upper().replace('OPENSRC', 'OPEMSRC' if i == 1 else 'OPENSRC'))
+                                             name=s.ble_name.upper().replace('_', '-' if i == 1 else '_'))
         self.stdout.write(f'샘플: livinglab 수신 {n_lab}건, 업로드 {n_sub}건')
 
     def lab_row(self, sensor, when):

@@ -14,7 +14,6 @@
 모든 시각은 Asia/Seoul(settings.TIME_ZONE) 기준이다.
 """
 import datetime
-import re
 
 from django.conf import settings
 from django.utils import timezone
@@ -151,13 +150,13 @@ def team_rows_between(team_no, start, end):
                 .values('mac', 'sensor', 'lat', 'lon', 'rssi'))
 
 
-def _number_in(name):
-    match = re.search(r'team\s*_?\s*(\d+)', str(name or ''), re.IGNORECASE)
-    return int(match.group(1)) if match else None
-
-
 def match_sensor(sensors, mac, name):
-    """학생이 보낸 (mac, sensor) → CampusSensor. MAC(등록된 경우) → 기기명 → 기기명 속 team 번호 순."""
+    """학생이 보낸 (mac, sensor) → CampusSensor. 등록된 BLE MAC 또는 BLE 기기명이 일치하면 그 센서.
+
+    sensor 는 학생이 BLE 패킷에서 읽은 device name 이라 기기명은 대소문자·공백·기호만 무시하고 정확히 비교한다.
+    (5주차 자기 팀 센서 'team3 sensor' 같은 이름이 캠퍼스 센서 3으로 잡히지 않도록 번호만으로는 맞추지 않는다.)
+    iOS 는 MAC 대신 UUID 를 주므로 MAC 이 등록돼 있어도 기기명 일치는 계속 인정한다.
+    """
     nmac = normalize_mac(mac)
     if nmac:
         for s in sensors:
@@ -167,12 +166,6 @@ def match_sensor(sensors, mac, name):
     for s in sensors:
         if nname and nname == normalize_name(s.ble_name):
             return s
-    # 'opemsrc_team5' 같은 오타: 기기명 안의 team 번호로 한 번 더 시도
-    number = _number_in(name)
-    if number is not None:
-        for s in sensors:
-            if _number_in(s.ble_name) == number:
-                return s
     return None
 
 
