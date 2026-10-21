@@ -39,3 +39,26 @@ class LatestSensorIpTests(TestCase):
 
     def test_empty(self):
         self.assertEqual(self.client.get(self.url).json(), [])
+
+
+class SensorIpsPageTests(TestCase):
+    url = '/sensor/ips/'
+
+    def test_rows_sorted_and_stale_in_red(self):
+        import time
+        now = int(time.time())
+        IpDb.objects.create(sensor='sensor 02', ip='172.30.2.1', time=now - 6 * 3600 - 1)  # 6시간 넘음
+        IpDb.objects.create(sensor='sensor 01', ip='172.30.1.1', time=now - 6 * 3600 + 60)  # 6시간 안
+        SensorData.objects.create(sensor='sensor 01', mac='D8:3A:DD:00:00:01', receiver='pi', mode='direct',
+                                  temperature=20, co2=400, sensing_time=now - 100)
+
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 200)
+        html = r.content.decode()
+        self.assertLess(html.index('sensor 01'), html.index('sensor 02'))
+        self.assertIn('<div class="row">sensor 01       172.30.1.1       D8:3A:DD:00:00:01  ', html)
+        self.assertIn('<div class="row stale">sensor 02       172.30.2.1       -                  ', html)
+        self.assertIn('갱신 안 된 센서 1개', html)
+
+    def test_empty(self):
+        self.assertContains(self.client.get(self.url), 'IP 기록이 없습니다.')

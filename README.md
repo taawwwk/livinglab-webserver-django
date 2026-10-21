@@ -44,7 +44,8 @@ Livinglab/
 ### 데이터 조회
 - **GET /sensor/api/map** - 모든 센서의 최신 데이터 (위치 포함, 지도용)
 - **GET /sensor/new/sensor/** - 최신 센서 데이터 조회
-- **GET /sensor/new/ip** - 최신 센서 IP 조회
+- **GET /sensor/new/ip** - 최신 센서 IP 조회 (sensor, ip, mac, KST 시각)
+- **GET /sensor/ips/** - 위 결과를 보는 웹 페이지 (6시간 이상 갱신 없으면 빨간색)
 
 ### 관리자 페이지
 - **GET /admin/** - Django 관리자 인터페이스

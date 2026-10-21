@@ -433,23 +433,45 @@ def latest_direct_mac(sensor_name):
             .first())
 
 
-@api_view(['GET'])
-def latest_sensor_ips(request):
-    """센서별 최신 IP 1건 + 그 센서의 MAC. time은 IP를 받은 시각(KST, 'YYYY-MM-DD HH:MM:SS')."""
-    latest_ips = {}
-
-    # 각 센서별 최신 IP 1건만 조회
+def latest_ip_rows():
+    """센서별 최신 IP 1건 + 그 센서의 MAC. time은 IP를 받은 시각(KST 문자열), epoch는 같은 시각의 UNIX 초."""
+    rows = []
     for sensor_name in IpDb.objects.values_list('sensor', flat=True).distinct():
         latest = IpDb.objects.filter(sensor=sensor_name).order_by('-time').first()
         if latest:
-            latest_ips[sensor_name] = {
+            rows.append({
                 'sensor': latest.sensor,
                 'ip': latest.ip,
                 'mac': latest_direct_mac(sensor_name),
                 'time': datetime.fromtimestamp(latest.time, tz=KST).strftime('%Y-%m-%d %H:%M:%S'),
-            }
+                'epoch': latest.time,
+            })
+    return rows
 
-    return Response(list(latest_ips.values()))
+
+@api_view(['GET'])
+def latest_sensor_ips(request):
+    """센서별 최신 IP 조회 (JSON). 항목: sensor, ip, mac, time(KST)"""
+    return Response([{k: row[k] for k in ('sensor', 'ip', 'mac', 'time')} for row in latest_ip_rows()])
+
+
+# IP 페이지에서 이보다 오래된 IP 기록은 빨간색으로 표시한다 (센서가 꺼졌거나 WiFi가 끊긴 것으로 본다)
+IP_STALE_SECONDS = 6 * 3600
+
+
+@require_http_methods(["GET"])
+def sensor_ips_page(request):
+    """/sensor/new/ip 결과를 사람이 보기 좋게 한 줄에 센서 하나씩 보여주는 페이지."""
+    now = time.time()
+    rows = sorted(latest_ip_rows(), key=lambda row: row['sensor'])
+    for row in rows:
+        row['stale'] = now - row['epoch'] >= IP_STALE_SECONDS
+    return render(request, 'sensor/ips.html', {
+        'rows': rows,
+        'now': datetime.fromtimestamp(now, tz=KST).strftime('%Y-%m-%d %H:%M:%S'),
+        'stale_hours': IP_STALE_SECONDS // 3600,
+        'stale_count': sum(row['stale'] for row in rows),
+    })
 
 
 def fetch_pws_data():

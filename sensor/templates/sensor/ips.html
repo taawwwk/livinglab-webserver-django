@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>센서 IP</title>
+  <style>
+    body { background: #fff; color: #000; font-family: ui-monospace, Menlo, Consolas, 'D2Coding', monospace; font-size: 14px; margin: 16px; }
+    .row { white-space: pre; line-height: 1.7; }
+    .stale { color: #d00; }
+    .meta { color: #666; margin-bottom: 12px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+<div class="meta">조회 시각 {{ now }} (KST) · 센서 {{ rows|length }}개 · {{ stale_hours }}시간 넘게 갱신 안 된 센서 {{ stale_count }}개 (빨간색)</div>
+{# 한글은 고정폭 글꼴에서 2칸이라 "센서"는 14자로 맞춘다 #}
+<div class="row"><b>{{ "센서"|ljust:14 }}{{ "IP"|ljust:17 }}{{ "MAC"|ljust:19 }}최신 수정 (KST)</b></div>
+{% for r in rows %}<div class="row{% if r.stale %} stale{% endif %}">{{ r.sensor|ljust:16 }}{{ r.ip|ljust:17 }}{{ r.mac|default:"-"|ljust:19 }}{{ r.time }}</div>
+{% empty %}<div class="row">IP 기록이 없습니다.</div>
+{% endfor %}
+</body>
+</html>

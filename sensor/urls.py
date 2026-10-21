@@ -9,5 +9,6 @@ urlpatterns = [
     path('api/timeseries', views.climate_timeseries, name='climate_timeseries'),
     path('new/sensor/', views.latest_sensor_data, name='latest_sensor_data'),
     path('new/ip', views.latest_sensor_ips, name='latest_sensor_ips'),
+    path('ips/', views.sensor_ips_page, name='sensor_ips_page'),
     path('dashboard/', views.dashboard, name='dashboard'),
 ]
