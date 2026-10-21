@@ -98,3 +98,7 @@ http://203.255.81.72:10021/sensor/sensing?sensor={센서이름}&latitude={위도
 • URL: http://203.255.81.72:10021/sensor/new/ip
 📥 Response
 • 성공 시 200 OK 및 최신 IP 리스트 데이터 반환
+• 항목: sensor, ip, mac, time
+  - mac: 그 센서가 직접(direct) 보낸 최신 측정 데이터의 MAC. 측정 데이터가 없으면 null
+  - time: IP를 받은 시각, KST 'YYYY-MM-DD HH:MM:SS' (2026-10-21 이전에는 UNIX 타임스탬프 정수였음)
+예: [{"sensor": "sensor 14", "ip": "172.30.182.181", "mac": "D8:3A:DD:C1:88:D7", "time": "2026-10-21 14:20:45"}]

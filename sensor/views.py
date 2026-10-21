@@ -416,9 +416,26 @@ def latest_sensor_data(request):
     return Response(list(latest_data.values()))
 
 
+def latest_direct_mac(sensor_name):
+    """센서가 직접(direct) 보낸 최신 측정 데이터의 MAC. 없으면 None.
+
+    sensor_ip_db에는 MAC 컬럼이 없어서 측정 데이터에서 가져온다. mobile 행의 mac은 센서가 아니라
+    폰이 본 주소(iOS는 UUID)라 제외한다.
+    sensor를 = 대신 범위(>= 그리고 <=)로 거는 것은 의도한 것이다. = 로 주면 플래너가 정렬의 sensor를 지워 버리고,
+    데이터가 많은 센서에서 전체 sensing_time 인덱스를 거꾸로 훑는다. 마지막 수신이 오래된 센서(예: 8월에 멈춘
+    sensor 32)는 수백만 행을 버리느라 0.8초가 걸렸다. 범위 + (sensor, sensing_time) 정렬이면
+    (sensor, sensing_time) 인덱스만 맞아서 센서당 수 ms로 끝난다.
+    """
+    return (SensorData.objects
+            .filter(sensor__gte=sensor_name, sensor__lte=sensor_name, mode='direct')
+            .order_by('-sensor', '-sensing_time')
+            .values_list('mac', flat=True)
+            .first())
+
+
 @api_view(['GET'])
 def latest_sensor_ips(request):
-    """최신 센서 IP 조회"""
+    """센서별 최신 IP 1건 + 그 센서의 MAC. time은 IP를 받은 시각(KST, 'YYYY-MM-DD HH:MM:SS')."""
     latest_ips = {}
 
     # 각 센서별 최신 IP 1건만 조회
@@ -428,7 +445,8 @@ def latest_sensor_ips(request):
             latest_ips[sensor_name] = {
                 'sensor': latest.sensor,
                 'ip': latest.ip,
-                'time': latest.time,
+                'mac': latest_direct_mac(sensor_name),
+                'time': datetime.fromtimestamp(latest.time, tz=KST).strftime('%Y-%m-%d %H:%M:%S'),
             }
 
     return Response(list(latest_ips.values()))
