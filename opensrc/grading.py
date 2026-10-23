@@ -96,38 +96,49 @@ def sensors_online_between(sensors, start, end):
     return {s for s in sensors if s.lab_sensor in seen}
 
 
-def last_reception(sensor):
-    """센서의 마지막 livinglab 수신 (aware datetime, 출처). 없으면 (None, None)."""
-    last_data = (SensorData.objects.filter(sensor=sensor.lab_sensor)
-                 .order_by('-sensing_time').values_list('sensing_time', flat=True).first())
+def _from_epoch(epoch):
+    return datetime.datetime.fromtimestamp(epoch, tz=datetime.timezone.utc) if epoch is not None else None
+
+
+def last_receptions(sensor):
+    """센서의 마지막 livinglab 수신 시각 (측정 데이터, IP 기록) — 각각 aware datetime 또는 None.
+
+    측정 데이터는 sensor 를 = 대신 범위로 건다 (sensor/views.latest_direct_mac 과 같은 이유:
+    측정이 오래 멈춘 센서에서 플래너가 전체 sensing_time 인덱스를 거꾸로 훑지 않게).
+    """
+    last_data = (SensorData.objects
+                 .filter(sensor__gte=sensor.lab_sensor, sensor__lte=sensor.lab_sensor)
+                 .order_by('-sensor', '-sensing_time').values_list('sensing_time', flat=True).first())
     last_ip = (IpDb.objects.filter(sensor=sensor.lab_sensor)
                .order_by('-time').values_list('time', flat=True).first())
-    candidates = []
-    if last_data is not None:
-        candidates.append((last_data, 'data'))
-    if last_ip is not None:
-        candidates.append((float(last_ip), 'ip'))
-    if not candidates:
-        return None, None
-    epoch, source = max(candidates)
-    return datetime.datetime.fromtimestamp(epoch, tz=datetime.timezone.utc), source
+    return _from_epoch(last_data), _from_epoch(float(last_ip) if last_ip is not None else None)
 
 
 def sensor_status(sensors, now):
-    """실시간 ON/OFF: 최근 OPENSRC_SENSOR_ONLINE_MINUTES 안에 수신이 있으면 ON."""
-    threshold = now - datetime.timedelta(minutes=settings.OPENSRC_SENSOR_ONLINE_MINUTES)
+    """실시간 ON/OFF.
+
+    측정 데이터가 최근 OPENSRC_SENSOR_ONLINE_MINUTES(10분) 안에 있거나, IP 기록이 최근
+    OPENSRC_SENSOR_IP_ONLINE_MINUTES(70분) 안에 있으면 ON. 측정 프로그램이 멈추고 IP만
+    60분마다 보내는 센서(캠퍼스 센서 3·4 = sensor 31·32)도 켜져 있으면 ON 으로 보이게 하려는 것.
+    """
+    data_threshold = now - datetime.timedelta(minutes=settings.OPENSRC_SENSOR_ONLINE_MINUTES)
+    ip_threshold = now - datetime.timedelta(minutes=settings.OPENSRC_SENSOR_IP_ONLINE_MINUTES)
     rows = []
     for s in sensors:
-        last, source = last_reception(s)
+        last_data, last_ip = last_receptions(s)
+        candidates = [(t, src) for t, src in ((last_data, 'data'), (last_ip, 'ip')) if t is not None]
+        last, source = max(candidates) if candidates else (None, None)
         rows.append({
             'number': s.number,
             'name': s.ble_name,
             'mac': s.ble_mac,
             'lab_sensor': s.lab_sensor,
             'location': s.location,
-            'online': bool(last and last >= threshold),
+            'online': bool((last_data and last_data >= data_threshold) or (last_ip and last_ip >= ip_threshold)),
             'last_seen': fmt(last),
             'last_source': source,
+            'last_data': fmt(last_data),
+            'last_ip': fmt(last_ip),
         })
     return rows
 
@@ -276,6 +287,7 @@ def evaluate(now=None):
         'now': fmt(now),
         'timezone': str(tz()),
         'online_minutes': settings.OPENSRC_SENSOR_ONLINE_MINUTES,
+        'ip_online_minutes': settings.OPENSRC_SENSOR_IP_ONLINE_MINUTES,
         'full_score': settings.OPENSRC_MIDTERM_FULL_SCORE,
         'penalty': settings.OPENSRC_MIDTERM_PENALTY,
         'dates': [d.isoformat() for d in dates],

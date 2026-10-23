@@ -169,6 +169,8 @@ OPENSRC_LAB_SENSOR = os.getenv('OPENSRC_LAB_SENSOR', 'sensor 01')
 OPENSRC_SLOT_HOURS = range(int(os.getenv('OPENSRC_SLOT_START', '9')), int(os.getenv('OPENSRC_SLOT_END', '18')))
 # 캠퍼스 센서 실시간 ON/OFF 판정: 최근 N분 안에 livinglab 수신(sensor_sensor_data 또는 sensor_ip_db)이 있으면 ON
 OPENSRC_SENSOR_ONLINE_MINUTES = int(os.getenv('OPENSRC_SENSOR_ONLINE_MINUTES', '10'))
+# IP 기록(sensor_ip_db)만으로 ON 판정할 때의 기준. 센서는 IP를 60분마다 보내므로 여유를 두고 70분.
+OPENSRC_SENSOR_IP_ONLINE_MINUTES = int(os.getenv('OPENSRC_SENSOR_IP_ONLINE_MINUTES', '70'))
 # 채점: 만점에서 누락 칸당 감점, 최저 0점
 OPENSRC_MIDTERM_FULL_SCORE = int(os.getenv('OPENSRC_MIDTERM_FULL_SCORE', '10'))
 OPENSRC_MIDTERM_PENALTY = int(os.getenv('OPENSRC_MIDTERM_PENALTY', '2'))

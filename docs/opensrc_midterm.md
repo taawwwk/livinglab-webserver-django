@@ -41,7 +41,7 @@
 | 수집 날짜 `CollectionDay` | 하루 한 행. 대시보드 그리드의 열. 비어 있으면 배정표의 날짜를 쓴다 |
 | 시간대 배정 `SlotAssignment` | 날짜 × 시작 시각(9~17) × 팀. (날짜, 시작 시각) 유일 |
 
-환경변수(`livinglab/settings.py`): `OPENSRC_SLOT_START`/`OPENSRC_SLOT_END` (기본 9/18), `OPENSRC_SENSOR_ONLINE_MINUTES` (기본 10),
+환경변수(`livinglab/settings.py`): `OPENSRC_SLOT_START`/`OPENSRC_SLOT_END` (기본 9/18), `OPENSRC_SENSOR_ONLINE_MINUTES` (기본 10), `OPENSRC_SENSOR_IP_ONLINE_MINUTES` (기본 70),
 `OPENSRC_MIDTERM_FULL_SCORE` (10), `OPENSRC_MIDTERM_PENALTY` (2), `OPENSRC_MIDTERM_CACHE_SECONDS` (15).
 
 ## 센서 가동 판정과 이름 정규화
@@ -50,7 +50,9 @@
 `sensor/views.py` 의 `normalize_sensor_name()` 은 이름에 `opensrc` 가 들어가면 숫자 추출을 하지 않고 소문자화만 한다
 (안 그러면 `opensrc_team1` → `sensor 01` 로 연구실 센서와 섞인다). Pi 쪽 이름은 admin 의 "livinglab 센서 이름"과 같아야 한다.
 
-- 실시간 ON/OFF: `sensor_sensor_data.sensing_time` 또는 `sensor_ip_db.time` 중 최근 수신이 `OPENSRC_SENSOR_ONLINE_MINUTES` 안이면 ON.
+- 실시간 ON/OFF: 측정 데이터(`sensor_sensor_data.sensing_time`)가 `OPENSRC_SENSOR_ONLINE_MINUTES`(10분) 안이거나,
+  IP 기록(`sensor_ip_db.time`)이 `OPENSRC_SENSOR_IP_ONLINE_MINUTES`(70분) 안이면 ON. IP는 60분마다 오므로 따로 기준을 둔다.
+  카드의 "마지막 수신" 뒤에 (IP)가 붙으면 측정 데이터 없이 IP만 들어오는 센서다.
 - 채점용 가동: 해당 1시간 칸 안에 두 테이블 중 어디든 수신이 1건이라도 있으면 그 칸에서 "가동".
 
 ## 칸 인정 로직 (`opensrc/grading.py`)

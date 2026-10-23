@@ -31,6 +31,7 @@ def dashboard(request):
     return render(request, 'opensrc/midterm.html', {
         'team_count': settings.OPENSRC_TEAM_COUNT,
         'online_minutes': settings.OPENSRC_SENSOR_ONLINE_MINUTES,
+        'ip_online_minutes': settings.OPENSRC_SENSOR_IP_ONLINE_MINUTES,
         'full_score': settings.OPENSRC_MIDTERM_FULL_SCORE,
         'penalty': settings.OPENSRC_MIDTERM_PENALTY,
     })

@@ -26,7 +26,7 @@
     <section>
       <div class="flex flex-wrap items-end gap-3 mb-3">
         <h2 class="text-lg font-bold tracking-tight mr-auto">캠퍼스 센서 가동 상태</h2>
-        <span class="text-xs text-neutral-500">최근 {{ online_minutes }}분 안에 서버 수신이 있으면 ON</span>
+        <span class="text-xs text-neutral-500">최근 {{ online_minutes }}분 안에 측정 데이터, 또는 {{ ip_online_minutes }}분 안에 IP 수신이 있으면 ON</span>
       </div>
       <div id="sensors" class="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"></div>
       <p id="sensors-empty" class="text-sm text-neutral-500 hidden">등록된 캠퍼스 센서가 없습니다.</p>
@@ -112,7 +112,9 @@ function renderSensors(sensors) {
     top.append(el('span', 'rounded-full px-2 py-0.5 text-xs font-bold ' + (s.online ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'), s.online ? 'ON' : 'OFF'));
     card.append(top);
     card.append(el('div', 'text-xs text-neutral-500 truncate', s.name + (s.location ? ' · ' + s.location : '')));
-    card.append(el('div', 'mt-2 text-sm', s.last_seen ? '마지막 수신 ' + s.last_seen.slice(5, 16) : '수신 기록 없음'));
+    card.append(el('div', 'mt-2 text-sm', s.last_seen
+      ? '마지막 수신 ' + s.last_seen.slice(5, 16) + (s.last_source === 'ip' ? ' (IP)' : '')
+      : '수신 기록 없음'));
     box.append(card);
   }
 }

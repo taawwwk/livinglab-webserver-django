@@ -21,6 +21,7 @@ def at(date, hour, minute=0):
 
 
 MIDTERM_SETTINGS = dict(OPENSRC_TEAM_COUNT=9, OPENSRC_SLOT_HOURS=range(9, 18), OPENSRC_SENSOR_ONLINE_MINUTES=10,
+                        OPENSRC_SENSOR_IP_ONLINE_MINUTES=70,
                         OPENSRC_MIDTERM_FULL_SCORE=10, OPENSRC_MIDTERM_PENALTY=2, OPENSRC_MIDTERM_CACHE_SECONDS=0)
 
 
@@ -79,16 +80,19 @@ class GradingTests(TestCase):
         self.assertEqual(sorted(s.number for s in online), [1, 2])
 
     def test_realtime_status(self):
-        self.lab(1, self.now - datetime.timedelta(minutes=9))
-        self.lab(2, self.now - datetime.timedelta(minutes=11), via='ip')
-        self.lab(2, self.now - datetime.timedelta(hours=5))
+        ago = lambda minutes: self.now - datetime.timedelta(minutes=minutes)
+        self.lab(1, ago(9))                    # 측정 데이터 10분 안 → ON
+        self.lab(2, ago(11))                   # 측정 데이터만 11분 전 → OFF
+        self.lab(3, ago(69), via='ip')         # 측정 없이 IP만 69분 전 → ON (IP는 60분 주기)
+        self.lab(3, ago(60 * 24 * 30))         # 한 달 전에 멈춘 측정 데이터
+        self.lab(4, ago(71), via='ip')         # IP 71분 전 → OFF
         rows = grading.sensor_status(self.sensors, self.now)
         by = {r['number']: r for r in rows}
-        self.assertTrue(by[1]['online'])
-        self.assertFalse(by[2]['online'])
-        self.assertEqual(by[2]['last_seen'], '2026-10-28 11:49:00')  # 두 테이블 중 더 최근 것, KST
-        self.assertEqual(by[2]['last_source'], 'ip')
-        self.assertFalse(by[5]['online'])
+        self.assertEqual({n: by[n]['online'] for n in by}, {1: True, 2: False, 3: True, 4: False, 5: False})
+        # 마지막 수신은 두 테이블 중 더 최근 것 (KST), 출처와 각각의 시각도 함께
+        self.assertEqual((by[3]['last_seen'], by[3]['last_source']), ('2026-10-28 10:51:00', 'ip'))
+        self.assertEqual(by[3]['last_data'], '2026-09-28 12:00:00')
+        self.assertEqual((by[2]['last_source'], by[2]['last_ip']), ('data', None))
         self.assertIsNone(by[5]['last_seen'])
 
     # --- 유효 데이터·센서 대응 ---------------------------------------------
@@ -248,7 +252,7 @@ class MidtermViewTests(TestCase):
         self.assertEqual(data['dates'], ['2026-10-28'])
         self.assertEqual(len(data['slots']), 9)
         self.assertEqual(data['sensors'][0]['location'], '도서관')
-        self.assertEqual(data['online_minutes'], 10)
+        self.assertEqual((data['online_minutes'], data['ip_online_minutes']), (10, 70))
         self.assertEqual(data['timezone'], 'Asia/Seoul')
         self.assertEqual({s['team_no'] for s in data['slots']}, {1, 2, None})
 
